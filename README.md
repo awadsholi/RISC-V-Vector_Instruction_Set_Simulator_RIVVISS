@@ -1,2 +1,1 @@
-# RISC-V-Vector_Instruction_Set_Simulator_RIVVISS
-Graduation Project
+# RISC-V-Vector Instruction Set Simulator RIVVISS
