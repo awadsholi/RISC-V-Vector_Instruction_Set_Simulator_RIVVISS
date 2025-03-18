@@ -35,7 +35,8 @@ void printRegisterStatus(Register_Status *reg_status) {
         printf("Register_Status is NULL.\n");
         return;
     }
-
+   
+  
     printf("Register_Status Information:\n");
     printf("VLEN  : %d\n", reg_status->VLEN);
     printf("AVL   : %d\n", reg_status->AVL);
@@ -50,7 +51,25 @@ void printRegisterStatus(Register_Status *reg_status) {
 
     printf("\nRegister Addresses:\n");
     for (int i = 0; i < NUMBER_OF_REGISTERS; i++) {
-        printf("Register[%d]: %p\n", i, (void *)reg_status->Register[i]);
+        printf("Register[%d]: ",i);
+        if (i==0) { 
+            for (int j = 0; j < reg_status->VLEN; j++)
+            {
+                printf("%d, ",  reg_status->Register[i][j]);
+            }
+            printf("\n");
+        }
+       
+        
+        else{
+            for (int j = 0; j < reg_status->VLMAX; j++)
+            {
+                printf("%d, ", reg_status->Register[i][j]);
+            }
+            printf("\n");
+        }
+        
+       
     }
 }
 
@@ -78,7 +97,10 @@ std::string decimalToBinary(int num) {
 void readConfigurationFile(const std::string& filePath) {
     std::ifstream file(filePath);
     if (!file) {
-        std::cerr << "Error: Cannot open file " << filePath << std::endl;
+                                /*FILE LOST STATUS*/
+        binary_conf = "0000000010";
+        reg_status->AVL = 8;
+        reg_status->VLEN = 256;
         return;
     }
 
@@ -191,13 +213,19 @@ void ReadConfigurationFileParameters(){
 
     for (int i = 0; i < NUMBER_OF_REGISTERS; i++)
     {
-        reg_status->Register[i] = ( int* )malloc(sizeof(int) * reg_status->VLMAX);
-
-        if (reg_status->Register[i] !=nullptr)
-        {         
-            memset(reg_status->Register[i], 0 , sizeof(int) * reg_status->VLMAX);
+        if(i == 0){
+            reg_status->Register[i] = ( int* )malloc(sizeof( int) * reg_status->VLEN);
+            memset(reg_status->Register[i], 0 , sizeof(int) * reg_status->VLEN);
         }
+            else{
+            reg_status->Register[i] = ( int* )malloc(sizeof(int) * reg_status->VLMAX);
+        
+            if (reg_status->Register[i] !=nullptr)
+            {         
+                memset(reg_status->Register[i], 0 , sizeof(int) * reg_status->VLMAX);
+            }
 
+        }
     }
     reg_status->VL = (reg_status->AVL > reg_status->VLMAX) ? reg_status->VLMAX: reg_status->AVL;
     printRegisterStatus(reg_status);
@@ -207,7 +235,7 @@ void ReadConfigurationFileParameters(){
 int main() {
    
     reg_status = new Register_Status;
-    readConfigurationFile("conf.txt");
+    readConfigurationFile("cof.txt");
     ReadConfigurationFileParameters();
     return 0;
 }
