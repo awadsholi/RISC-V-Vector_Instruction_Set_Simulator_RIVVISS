@@ -4,7 +4,7 @@
 #include <cstdio> 
 #include <stdlib.h>
 #include <string.h>
-
+#include <systemc.h>
 #define NUMBER_OF_REGISTERS 32
 
 typedef struct {
@@ -15,11 +15,9 @@ typedef struct {
 } Vtype;
 
 
-
-
-
 typedef struct{
-    int * Register [NUMBER_OF_REGISTERS];
+    char *Register0;
+    int * Register [NUMBER_OF_REGISTERS-1];
     int VLEN;
     int AVL;
     int VL; 
@@ -28,14 +26,37 @@ typedef struct{
 }Register_Status;
 
 Register_Status *reg_status = nullptr;
+std::string binary_conf = "";
+
+
+         //      Functions prototypes     //
+
+void free_resourses(Register_Status *reg_status);              
+void printRegisterStatus(Register_Status *reg_status);
+std::string decimalToBinary(int num) ;
+void readConfigurationFile(const std::string& filePath);
+void ReadConfigurationFileParameters();
+
+
+
+
+
+void free_resourses(Register_Status *reg_status){
+
+    for(int i=0;i<NUMBER_OF_REGISTERS-1;i++){
+        free(reg_status->Register[i]);
+    }
+    free(reg_status->Register0);
+
+}
 
 
 void printRegisterStatus(Register_Status *reg_status) {
+
     if (reg_status == NULL) {
         printf("Register_Status is NULL.\n");
         return;
     }
-   
   
     printf("Register_Status Information:\n");
     printf("VLEN  : %d\n", reg_status->VLEN);
@@ -50,30 +71,24 @@ void printRegisterStatus(Register_Status *reg_status) {
     printf("MA    : %c\n", reg_status->vtype.MA);
 
     printf("\nRegister Addresses:\n");
-    for (int i = 0; i < NUMBER_OF_REGISTERS; i++) {
-        printf("Register[%d]: ",i);
-        if (i==0) { 
-            for (int j = 0; j < reg_status->VLEN; j++)
-            {
-                printf("%d, ",  reg_status->Register[i][j]);
-            }
-            printf("\n");
-        }
-       
-        
-        else{
+
+    printf("Register[0]: ");
+    for (int i = 0; i < reg_status->VLEN; i++){
+        printf("%d, ", reg_status->Register0[i]);
+    }
+    printf("\n");
+
+    for (int i = 0; i < NUMBER_OF_REGISTERS-1; i++) {
+            
+            printf("Register[%d]: ",i+1);
             for (int j = 0; j < reg_status->VLMAX; j++)
             {
                 printf("%d, ", reg_status->Register[i][j]);
             }
-            printf("\n");
-        }
-        
-       
-    }
+            printf("\n"); 
+    }    
 }
 
-std::string binary_conf = "";
 
 
 std::string decimalToBinary(int num) {
@@ -94,6 +109,9 @@ std::string decimalToBinary(int num) {
     
     return binary;
 }
+
+
+
 void readConfigurationFile(const std::string& filePath) {
     std::ifstream file(filePath);
     if (!file) {
@@ -129,6 +147,7 @@ void readConfigurationFile(const std::string& filePath) {
     }
 }
 
+
 void ReadConfigurationFileParameters(){
     reg_status->vtype = {0};
     char SEW[4] = {'\0'};  
@@ -150,7 +169,6 @@ void ReadConfigurationFileParameters(){
         }
     }
 
-
     int sewValue = 0;
     if (SEW[0] == '1') 
         sewValue += 4;
@@ -169,11 +187,6 @@ void ReadConfigurationFileParameters(){
             reg_status->vtype.SEW = 16; 
             break;
         case 2:  
-            reg_status->vtype.SEW = 32; 
-            break;
-        case 3:  
-            reg_status->vtype.SEW = 64; 
-            break;
         default: 
             reg_status->vtype.SEW = 32; 
             break;
@@ -209,33 +222,131 @@ void ReadConfigurationFileParameters(){
             reg_status->vtype.LMUL = 1.0f;
             break;
     }
-    reg_status->VLMAX = (reg_status->VLEN/reg_status->vtype.SEW) * reg_status->vtype.LMUL;
+    reg_status->VLMAX = (reg_status->VLEN/reg_status->vtype.SEW) * reg_status->vtype.LMUL;  //calculating VLMAX(number of elements)
 
-    for (int i = 0; i < NUMBER_OF_REGISTERS; i++)
+    for (int i = 0; i < NUMBER_OF_REGISTERS-1; i++)
     {
-        if(i == 0){
-            reg_status->Register[i] = ( int* )malloc(sizeof( int) * reg_status->VLEN);
-            memset(reg_status->Register[i], 0 , sizeof(int) * reg_status->VLEN);
-        }
-            else{
-            reg_status->Register[i] = ( int* )malloc(sizeof(int) * reg_status->VLMAX);
-        
-            if (reg_status->Register[i] !=nullptr)
+        reg_status->Register[i] =(int *) malloc(sizeof(int) * reg_status->VLMAX);         //allocate enough space for V1-V31 and set the values to zero
+          if (reg_status->Register[i] !=nullptr)
             {         
-                memset(reg_status->Register[i], 0 , sizeof(int) * reg_status->VLMAX);
-            }
+            memset(reg_status->Register[i], 0 , sizeof(int) * reg_status->VLMAX);
+            }    
 
-        }
     }
+
+    reg_status->Register0 = (char *)malloc(reg_status->VLEN);           //allocate enough space for V0 and set the values to zero
+    memset(reg_status->Register0, 0 , reg_status->VLEN);
     reg_status->VL = (reg_status->AVL > reg_status->VLMAX) ? reg_status->VLMAX: reg_status->AVL;
-    printRegisterStatus(reg_status);
 
 }
 
-int main() {
+
+
+
+SC_MODULE(Instruction_Memory) {
+    sc_in<sc_uint<8>> address;
+    sc_out<sc_bv<32>> instruction;
+
+    sc_bv<32> memory[256];  // 256 x 32-bit memory
+
+    const std::string filePath = "instructions.bin";
+
+    void read_from_rom() {
+        instruction.write(memory[address.read()]);
+        //Decode
+        std::cout << "Instruction :" << instruction<<endl;
+    }
+
+    void load_memory() {
+        std::ifstream file(filePath);
+        if (!file.is_open()) {
+            std::cerr << "Error: Cannot open file " << filePath << std::endl;
+            sc_stop();
+            return;
+        }
+
+        std::string line;
+        int i = 0;
+        while (std::getline(file, line) && i < 256) {
+            if (line.length() != 32) {
+                std::cerr << "Invalid instruction length at line " << i << std::endl;
+                continue;
+            }
+            memory[i] = sc_bv<32>(line.c_str());
+            
+            i++;
+        }
+
+     
+        file.close();
+    }
+
+    SC_CTOR(Instruction_Memory) {
+        load_memory();  // Load instructions from input file
+
+        SC_METHOD(read_from_rom);
+        sensitive << address;
+    }
+};
+
+
+SC_MODULE(Instruction_Fetch_Stage){
    
+
+    sc_out<sc_bv<32>> instruction_out;
+
+
+    Instruction_Memory instruction_memory_instance;
+
+    sc_signal <sc_uint<8>> PC; //wire
+
+    SC_CTOR(Instruction_Fetch_Stage) : instruction_memory_instance("im"){
+        instruction_memory_instance.address(PC);
+        instruction_memory_instance.instruction(instruction_out);
+
+        PC.write(0); // intialize the pc with value 0
+
+
+        SC_THREAD(fetch);
+        
+    }
+    void fetch(){
+        
+        while (true)
+        {
+            wait(1,SC_NS);
+            if(PC.read() == 39){
+                sc_stop();
+                break;
+            }
+            PC.write(PC.read() + 1);
+        }
+   
+    }
+    void reset_pc(){
+        PC.write(0);
+    }                                                                          
+};
+
+
+
+
+
+
+int sc_main(int argc, char* argv[]) {
     reg_status = new Register_Status;
-    readConfigurationFile("cof.txt");
+    readConfigurationFile("cofigure.txt");
     ReadConfigurationFileParameters();
+
+    // Create signal and module BEFORE starting simulation
+    sc_signal<sc_bv<32>> instruction_signal;
+    Instruction_Fetch_Stage IF("IF");
+    IF.instruction_out(instruction_signal);  // Bind port
+
+    sc_start();  // Start simulation AFTER setup
+
+   
+
+    free_resourses(reg_status);
     return 0;
 }
