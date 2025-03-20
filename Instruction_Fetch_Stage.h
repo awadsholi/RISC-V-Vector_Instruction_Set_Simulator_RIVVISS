@@ -13,7 +13,6 @@ SC_MODULE(Instruction_Memory) {
 
     void read_from_rom() {
         instruction.write(memory[address.read()]);
-        //Decode
     }
 
     void load_memory() {
