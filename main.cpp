@@ -300,6 +300,7 @@ void ReadConfigurationFileParameters(){
     }
     reg_status->VLMAX = (reg_status->VLEN/reg_status->vtype.SEW) * reg_status->vtype.LMUL;  //calculating VLMAX(number of elements)
 
+    
     for (int i = 0; i < NUMBER_OF_REGISTERS-1; i++)
     {
         reg_status->Register[i] =(int *) malloc(sizeof(int) * reg_status->VLMAX);     //allocate enough space for V1-V31 and set the values to zero
@@ -320,23 +321,8 @@ void ReadConfigurationFileParameters(){
 
 SC_MODULE(Decode_Execution_Stage) {
     sc_in<sc_bv<32>> instruction;
+    bool first_instruction;  // Flag to skip the first reading instution "Zeros"
 
-    SC_CTOR(Decode_Execution_Stage) {
-        SC_METHOD(decode_process);
-        sensitive << instruction;  // Trigger on instruction changes
-    }
-
-    void decode_process() {
-        sc_bv<32> instr = instruction.read();
-        std:: cout << "Instrution: " << instr << endl;
-    }
-};
-
-/////               INSTRUCTION MEMORY MODULE           //////////
-
-SC_MODULE(Instruction_Memory) {
-    sc_in<sc_uint<8>> address;
-    sc_out<sc_bv<32>> instruction;
     sc_bv<32> instruction_div;    /// for takes the value of instrution to split 
 
     sc_bv<6> funct6;
@@ -346,14 +332,19 @@ SC_MODULE(Instruction_Memory) {
     sc_bv<3> funct3;
     unsigned int vd;
     sc_bv<7> opcode;
+    SC_CTOR(Decode_Execution_Stage) : first_instruction(true) {
+        SC_METHOD(decode_process);
+        sensitive << instruction;  // Trigger on instruction changes
+    }
 
-    const std::string filePath = "instructions.bin";
+    void decode_process() {
+        if (first_instruction) {
+            first_instruction = false; 
+            return;
+        }
 
-    void read_from_rom() {
-        instruction.write(memory[address.read()]);
-        //Decode
-        ///division of the instruction
-        instruction_div = memory[address.read()];
+        instruction_div = instruction.read();
+        std::cout <<"Instruction:"<< instruction_div<<endl;
         funct6 = instruction_div.range(31,26);
         vm = instruction_div.range(25,25);
         vs2 = instruction_div.range(24,20).to_uint();           //convert from string to unsigned int 
@@ -387,7 +378,7 @@ SC_MODULE(Instruction_Memory) {
                                     vsub_vv(reg_status,vd,vs1,vs2,vm.to_uint());  
                                     break;
                         }
-
+                    break;
                     case 0b000011:                                  //Vsub
                         switch (funct3.to_uint()){ 
 
@@ -396,7 +387,7 @@ SC_MODULE(Instruction_Memory) {
                                     vrsub_vi(reg_status,vd,vs1,Imm,vm.to_uint()); 
                                     break;
                         }
-
+                    break;
                     case 0b001001:                                  //Vand
                     switch (funct3.to_uint()){ 
 
@@ -404,6 +395,7 @@ SC_MODULE(Instruction_Memory) {
                                 vand_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
                                 break;
                     }
+                    break;
                     case 0b001010:                                  //vor.vv
                     switch (funct3.to_uint()){ 
 
@@ -411,6 +403,7 @@ SC_MODULE(Instruction_Memory) {
                                 vor_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
                                 break;
                     }
+                    break;
                     case 0b001011:                                  //vxor.vv
                     switch (funct3.to_uint()){ 
 
@@ -418,8 +411,7 @@ SC_MODULE(Instruction_Memory) {
                                 vxor_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
                                 break;
                     }
-                        
-                        
+                            
                     break;
                 }
             break;
@@ -433,6 +425,22 @@ SC_MODULE(Instruction_Memory) {
          std::cout << "vd: " << vd << endl;
         
         printf("\n\n\n");
+
+    }
+};
+
+/////               INSTRUCTION MEMORY MODULE           //////////
+
+SC_MODULE(Instruction_Memory) {
+    sc_in<sc_uint<8>> address;
+    sc_out<sc_bv<32>> instruction;
+
+
+    const std::string filePath = "instructions.bin";
+
+    void read_from_rom() {
+        instruction.write(memory[address.read()]);
+        //Decode
     }
 
     void load_memory() {
@@ -477,7 +485,6 @@ SC_MODULE(Instruction_Memory) {
 SC_MODULE(Instruction_Fetch_Stage) {
     sc_out<sc_bv<32>> instruction_out;
     Instruction_Memory instruction_memory_instance;
-    // Decode_Execution_Stage decode_execution_stage;
     sc_signal<sc_uint<8>> PC;
 
     SC_CTOR(Instruction_Fetch_Stage) 
@@ -513,7 +520,18 @@ SC_MODULE(Instruction_Fetch_Stage) {
 
 
 
+SC_MODULE(Fetch_To_Execution) {
+    Instruction_Fetch_Stage fetch;
+    Decode_Execution_Stage decode;
+    sc_signal<sc_bv<32>> instruction_sig;  // Signal to connect ports
 
+    SC_CTOR(Fetch_To_Execution) : fetch("fetch"), decode("decode") {
+        // Connect fetch's output to the signal
+        fetch.instruction_out(instruction_sig);
+        // Connect the signal to decode's input
+        decode.instruction(instruction_sig);
+    }
+};
 
 
 int sc_main(int argc, char* argv[]) {
@@ -527,20 +545,18 @@ int sc_main(int argc, char* argv[]) {
         memory[i] = sc_bv<32>();  
     }
 
-    reg_status->Register[0][0] = 1;
-    reg_status->Register[0][1] = 1;
-    reg_status->Register[0][2] = 0;
+    reg_status->Register[0][0] = 6;
+    reg_status->Register[0][1] = 4;
+    reg_status->Register[0][2] = 5;
     reg_status->Register[0][3] = 0;
 
     reg_status->Register[1][0] = 2;
-    reg_status->Register[1][1] = 0;
-    reg_status->Register[1][2] = 1;
-    reg_status->Register[1][3] = 0;
+    reg_status->Register[1][1] = 1;
+    reg_status->Register[1][2] = 7;
+    reg_status->Register[1][3] = 1;
   
     // Create signal and module BEFORE starting simulation
-    sc_signal<sc_bv<32>> instruction_signal;
-    Instruction_Fetch_Stage IF("IF");
-    IF.instruction_out(instruction_signal);  // Bind port
+    Fetch_To_Execution fetcth_to_execution("fetch_execution");
 
     sc_start();  // Start simulation AFTER setup
 
