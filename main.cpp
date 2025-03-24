@@ -87,7 +87,33 @@ void vand_vv(Register_Status * register_status, uint8_t vd, uint8_t vs1, uint8_t
         }
     else{}
     }
-    
+
+    void vor_vv(Register_Status *register_status, uint8_t vd, uint8_t vs1, uint8_t vs2, uint8_t vm) {
+        // VOR_VV: Perform bitwise OR between vector registers vs1 and vs2, and store in vd
+        if (vm == 1) {
+            for (uint64_t i = 0; i < register_status->VL; i++) {
+                // Perform bitwise OR operation for each element in the vector
+                register_status->Register[vd - 1][i] = 
+                    register_status->Register[vs2 - 1][i] | register_status->Register[vs1 - 1][i];
+            }
+        } else {
+            // Handle the case when vm is not equal to 1
+        }
+    }
+    void vxor_vv(Register_Status *register_status, uint8_t vd, uint8_t vs1, uint8_t vs2, uint8_t vm) {
+        // VXOR_VV: Perform bitwise XOR between vector registers vs1 and vs2, and store in vd
+        if (vm == 1) {
+            for (uint64_t i = 0; i < register_status->VL; i++) {
+                // Perform bitwise XOR operation for each element in the vector
+                register_status->Register[vd - 1][i] = 
+                    register_status->Register[vs2 - 1][i] ^ register_status->Register[vs1 - 1][i];
+            }
+        } else {
+            // Handle the case when vm is not equal to 1 (optional, depending on the operation definition)
+            // This could be where you handle vector masking, depending on the specific behavior.
+        }
+    }
+        
 
 
 void free_resourses(Register_Status *reg_status){                         //Realese resourses 
@@ -378,6 +404,20 @@ SC_MODULE(Instruction_Memory) {
                                 vand_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
                                 break;
                     }
+                    case 0b001010:                                  //vor.vv
+                    switch (funct3.to_uint()){ 
+
+                        case 0b000:                                 // Vector to Vector (vor.vv)
+                                vor_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                    }
+                    case 0b001011:                                  //vxor.vv
+                    switch (funct3.to_uint()){ 
+
+                        case 0b000:                                 // Vector to Vector (vxor.vv)
+                                vxor_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                    }
                         
                         
                     break;
@@ -487,15 +527,15 @@ int sc_main(int argc, char* argv[]) {
         memory[i] = sc_bv<32>();  
     }
 
-    reg_status->Register[0][0] = -10;
-    reg_status->Register[0][1] = -7;
-    reg_status->Register[0][2] = 18;
-    reg_status->Register[0][3] = 23;
+    reg_status->Register[0][0] = 1;
+    reg_status->Register[0][1] = 1;
+    reg_status->Register[0][2] = 0;
+    reg_status->Register[0][3] = 0;
 
-    reg_status->Register[1][0] = 12;
-    reg_status->Register[1][1] = 15;
-    reg_status->Register[1][2] = -23;
-    reg_status->Register[1][3] = -35;
+    reg_status->Register[1][0] = 2;
+    reg_status->Register[1][1] = 0;
+    reg_status->Register[1][2] = 1;
+    reg_status->Register[1][3] = 0;
   
     // Create signal and module BEFORE starting simulation
     sc_signal<sc_bv<32>> instruction_signal;
