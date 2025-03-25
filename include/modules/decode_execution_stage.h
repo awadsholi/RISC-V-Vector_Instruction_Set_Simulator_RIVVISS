@@ -32,7 +32,6 @@ SC_MODULE(Decode_Execution_Stage) {
         }
 
         instruction_div = instruction.read();
-        std::cout <<"Instruction:"<< instruction_div<<endl;
         funct6 = instruction_div.range(31,26);
         vm = instruction_div.range(25,25);
         vs2 = instruction_div.range(24,20).to_uint();           //convert from string to unsigned int 
@@ -71,6 +70,7 @@ SC_MODULE(Decode_Execution_Stage) {
                         switch (funct3.to_uint()){ 
                             case 0b011:                              // Vector to Immediate (vrsub.vi)
                                     Imm=instruction_div.range(19,15).to_int();
+                                    printf("Immediate = %d",Imm);
                                     vrsub_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
                                     break;
                         }break;
@@ -99,7 +99,7 @@ SC_MODULE(Decode_Execution_Stage) {
                                 break;
                         case 0b011:                                // Vector to Immediate(vxor.vi)
                                 Imm=instruction_div.range(19,15).to_int();
-                                // vxor_vi(reg_status,vd,vs2,Imm,vm.to_uint());
+                                vxor_vi(reg_status,vd,vs2,Imm,vm.to_uint());
                                 break;
                     }break;
 
@@ -107,11 +107,11 @@ SC_MODULE(Decode_Execution_Stage) {
 
                     switch (funct3.to_uint()){ 
                         case 0b000:                                  // Vector to Vector (vmv.v.v)
-                                // vmv_v_v(reg_status,vd,vs1,vm.to_uint()); 
+                                vmv_v_v(reg_status,vd,vs1,vm.to_uint()); 
                                 break;
                         case 0b011:                                  // Vector to Immediate(vmv.v.i)
                                 Imm=instruction_div.range(19,15).to_int();
-                                // vxor_vi(reg_status,vd,vs2,Imm,vm.to_uint());
+                                vxor_vi(reg_status,vd,vs2,Imm,vm.to_uint());
                                 break;
                     }break;
                            

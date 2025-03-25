@@ -45,7 +45,7 @@ void printRegisterStatus(Register_Status *reg_status) {
 
     printf("Vector_Registr[0]: ");
     for (int i = 0; i < reg_status->VLEN; i++){
-        printf("%d, ", reg_status->Register0[i]);
+        printf("%d, ", reg_status->Vector_Register0[i]);
     }
     printf("\n");
 
@@ -54,7 +54,7 @@ void printRegisterStatus(Register_Status *reg_status) {
             printf("Vector_Register[%d]: ",i+1);
             for (int j = 0; j < reg_status->VLMAX; j++)
             {
-                printf("%d, ", reg_status->Register[i][j]);
+                printf("%d, ", reg_status->Vector_Register[i][j]);
             }
             printf("\n"); 
     }    
@@ -63,9 +63,9 @@ void printRegisterStatus(Register_Status *reg_status) {
 void free_resourses(Register_Status *reg_status){                         //Realese resourses 
 
     for(int i=0;i<NUMBER_OF_REGISTERS-1;i++){
-        free(reg_status->Register[i]);
+        free(reg_status->Vector_Register[i]);
     }
-    free(reg_status->Register0);
+    free(reg_status->Vector_Register0);
     delete [] memory;
 }
 
@@ -189,16 +189,16 @@ void ReadConfigurationFileParameters(){
     
     for (int i = 0; i < NUMBER_OF_REGISTERS-1; i++)
     {
-        reg_status->Register[i] =(int *) malloc(sizeof(int) * reg_status->VLMAX);     //allocate enough space for V1-V31 and set the values to zero
-          if (reg_status->Register[i] !=nullptr)
+        reg_status->Vector_Register[i] =(int *) malloc(sizeof(int) * reg_status->VLMAX);     //allocate enough space for V1-V31 and set the values to zero
+          if (reg_status->Vector_Register[i] !=nullptr)
             {         
-            memset(reg_status->Register[i], 0 , sizeof(int) * reg_status->VLMAX);
+            memset(reg_status->Vector_Register[i], 0 , sizeof(int) * reg_status->VLMAX);
             }    
 
     }
 
-    reg_status->Register0 = (char *)malloc(reg_status->VLEN);                //allocate enough space for V0 and set the values to zero
-    memset(reg_status->Register0, 0 , reg_status->VLEN);
+    reg_status->Vector_Register0 = (int8_t *)malloc(reg_status->VLEN);                //allocate enough space for V0 and set the values to zero
+    memset(reg_status->Vector_Register0, 0 , reg_status->VLEN);
     reg_status->VL = (reg_status->AVL > reg_status->VLMAX) ? reg_status->VLMAX: reg_status->AVL;
 
 }
