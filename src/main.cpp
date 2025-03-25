@@ -19,23 +19,23 @@ int sc_main(int argc, char* argv[]) {
         memory[i] = sc_bv<32>();  
     }
 
-    reg_status->Register[0][0] = 9;
-    reg_status->Register[0][1] = 15;
-    reg_status->Register[0][2] = -134;
-    reg_status->Register[0][3] = 13;
-    reg_status->Register[0][4] = 141;
-    reg_status->Register[0][5] = 41;
-    reg_status->Register[0][6] = -31;
-    reg_status->Register[0][7] = -141;
+    reg_status->Vector_Register[0][0] = 9;
+    reg_status->Vector_Register[0][1] = 15;
+    reg_status->Vector_Register[0][2] = -134;
+    reg_status->Vector_Register[0][3] = 13;
+    reg_status->Vector_Register[0][4] = 141;
+    reg_status->Vector_Register[0][5] = 41;
+    reg_status->Vector_Register[0][6] = -31;
+    reg_status->Vector_Register[0][7] = -141;
 
-    reg_status->Register[1][0] = -12;
-    reg_status->Register[1][1] = 21;
-    reg_status->Register[1][2] = 15;
-    reg_status->Register[1][3] = 31;
-    reg_status->Register[1][4] = 31;
-    reg_status->Register[1][5] = 12;
-    reg_status->Register[1][6] = 142;
-    reg_status->Register[1][7] = 25;
+    reg_status->Vector_Register[1][0] = -12;
+    reg_status->Vector_Register[1][1] = 21;
+    reg_status->Vector_Register[1][2] = 15;
+    reg_status->Vector_Register[1][3] = 31;
+    reg_status->Vector_Register[1][4] = 31;
+    reg_status->Vector_Register[1][5] = 12;
+    reg_status->Vector_Register[1][6] = 142;
+    reg_status->Vector_Register[1][7] = 25;
   
     // Create signal and module BEFORE starting simulation
     Fetch_To_Execution fetcth_to_execution("fetch_execution");

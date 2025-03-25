@@ -10,13 +10,14 @@ typedef struct {
     char MA;
 } Vtype;
 
-typedef struct {
-    char* Register0;
-    int* Register[NUMBER_OF_REGISTERS-1];
-    int VLEN;
-    int AVL;
-    int VL;
-    int VLMAX;
+typedef struct{
+    uint32_t Scalar_Regiaters[NUMBER_OF_REGISTERS];   // storing raw 32-bits 
+    int8_t *Vector_Register0;                         // Vector Register0
+    int *Vector_Register [NUMBER_OF_REGISTERS-1];     // Array of vector_Registers (from V1 -> V31 )
+    int VLEN;                                         // Length for each Vector register
+    int AVL;                                          // AVL (Application vector length)
+    uint32_t VL;                                      // Vl (number of elements to process)
+    uint32_t VLMAX;                                   // VLAMX = (VLEN/SEW *LMUL )
     Vtype vtype;
 } Register_Status;
 
