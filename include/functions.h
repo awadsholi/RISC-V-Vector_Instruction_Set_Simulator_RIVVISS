@@ -2,7 +2,7 @@
 #define FUNCTIONS_H
 
 #include <string>
-#include "include/register_types.h"
+#include "register_types.h"
 
 std::string decimalToBinary(int num);
 void printRegisterStatus(Register_Status* reg_status);

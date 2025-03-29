@@ -1,4 +1,4 @@
-#include "include/functions.h"
+#include "functions.h"
 #include <iostream>
 #include <fstream>
 #include <cstdlib>
@@ -30,8 +30,6 @@ void printRegisterStatus(Register_Status *reg_status) {
     }
   
     printf("Register_Status Information:\n");
-    printf("VLEN  : %d\n", reg_status->VLEN);
-    printf("AVL   : %d\n", reg_status->AVL);
     printf("VL    : %d\n", reg_status->VL);
     printf("VLMAX : %d\n", reg_status->VLMAX);
 
@@ -41,20 +39,14 @@ void printRegisterStatus(Register_Status *reg_status) {
     printf("TA    : %c\n", reg_status->vtype.TA);
     printf("MA    : %c\n", reg_status->vtype.MA);
 
-    printf("\nVector Register:\n\n");
+    printf("\n\n");
 
-    printf("Vector_Registr[0]: ");
-    for (int i = 0; i < reg_status->VLEN; i++){
-        printf("%d, ", reg_status->Vector_Register0[i]);
-    }
-    printf("\n");
+    for (int i = 0; i < NUMBER_OF_REGISTERS; i++) {
+            printf("Vector_Register[%d]: ",i);
 
-    for (int i = 0; i < NUMBER_OF_REGISTERS-1; i++) {
-            
-            printf("Vector_Register[%d]: ",i+1);
-            for (int j = 0; j < reg_status->VLMAX; j++)
-            {
-                printf("%d, ", reg_status->Vector_Register[i][j]);
+            for (int j = 0; j < VLEN ; j=j+reg_status->vtype.SEW){
+      
+                printf("%d, ", reg_status->Vector_Register[i].range(j+reg_status->vtype.SEW-1 , j).to_int());
             }
             printf("\n"); 
     }    
@@ -62,11 +54,9 @@ void printRegisterStatus(Register_Status *reg_status) {
 
 void free_resourses(Register_Status *reg_status){                         //Realese resourses 
 
-    for(int i=0;i<NUMBER_OF_REGISTERS-1;i++){
-        free(reg_status->Vector_Register[i]);
-    }
-    free(reg_status->Vector_Register0);
+    free(reg_status);
     delete [] memory;
+
 }
 
 
@@ -76,7 +66,6 @@ void readConfigurationFile(const std::string& filePath) {
                                 /*FILE LOST STATUS*/
         binary_conf = "0000000010";
         reg_status->AVL = 8;
-        reg_status->VLEN = 256;
         return;
     }
 
@@ -87,22 +76,13 @@ void readConfigurationFile(const std::string& filePath) {
     while (std::getline(file, line)) {
         if (std::sscanf(line.c_str(), "%s %d", key, &value) == 2) {
             if (std::string(key) == "VTYPE") {
-                std::cout << "vtype: " << value << std::endl;
                 binary_conf = decimalToBinary(value);
-                std::cout << "Binary: " << binary_conf << std::endl;
-            }
-
-            else if (std::string(key) == "VLEN") {
-                std::cout << "vlen: " << value << std::endl;
-                reg_status->VLEN = value;
             }
 
             else if (std::string(key) == "AVL") {
-                std::cout << "AVL: " << value << std::endl;
                 reg_status->AVL = value;
             }
             else if (std::string(key) == "INSTRUCTION_MEMORY_SIZE") {
-                std::cout << "INSTRUCTION_MEMORY_SIZE: " << value << std::endl;
                 INSTRUCTION_MEMORY_SIZE = value;
             }
         }
@@ -184,21 +164,9 @@ void ReadConfigurationFileParameters(){
             reg_status->vtype.LMUL = 1.0f;
             break;
     }
-    reg_status->VLMAX = (reg_status->VLEN/reg_status->vtype.SEW) * reg_status->vtype.LMUL;  //calculating VLMAX(number of elements)
 
-    
-    for (int i = 0; i < NUMBER_OF_REGISTERS-1; i++)
-    {
-        reg_status->Vector_Register[i] =(int *) malloc(sizeof(int) * reg_status->VLMAX);     //allocate enough space for V1-V31 and set the values to zero
-          if (reg_status->Vector_Register[i] !=nullptr)
-            {         
-            memset(reg_status->Vector_Register[i], 0 , sizeof(int) * reg_status->VLMAX);
-            }    
+    reg_status->VLMAX = (VLEN/reg_status->vtype.SEW) * reg_status->vtype.LMUL;  //calculating VLMAX(number of elements)
 
-    }
-
-    reg_status->Vector_Register0 = (int8_t *)malloc(reg_status->VLEN);                //allocate enough space for V0 and set the values to zero
-    memset(reg_status->Vector_Register0, 0 , reg_status->VLEN);
     reg_status->VL = (reg_status->AVL > reg_status->VLMAX) ? reg_status->VLMAX: reg_status->AVL;
 
 }
