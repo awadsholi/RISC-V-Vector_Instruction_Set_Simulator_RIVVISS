@@ -1,11 +1,10 @@
 #ifndef DECODE_EXECUTION_STAGE_H
 #define DECODE_EXECUTION_STAGE_H
-
 #include <systemc.h>
-#include "include/register_types.h"
-#include "include/instructions.h"
+#include "register_types.h"
+#include "instructions.h"
 
-///////////             DECODE AND EXECUTION STAGE          ///////////////
+////////////////                       DECODE AND EXECUTION STAGE                        //////////////////
 
 SC_MODULE(Decode_Execution_Stage) {
     sc_in<sc_bv<32>> instruction;
@@ -70,7 +69,6 @@ SC_MODULE(Decode_Execution_Stage) {
                         switch (funct3.to_uint()){ 
                             case 0b011:                              // Vector to Immediate (vrsub.vi)
                                     Imm=instruction_div.range(19,15).to_int();
-                                    printf("Immediate = %d",Imm);
                                     vrsub_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
                                     break;
                         }break;
@@ -111,7 +109,39 @@ SC_MODULE(Decode_Execution_Stage) {
                                 break;
                         case 0b011:                                  // Vector to Immediate(vmv.v.i)
                                 Imm=instruction_div.range(19,15).to_int();
-                                vxor_vi(reg_status,vd,vs2,Imm,vm.to_uint());
+                                vmv_v_i(reg_status,vd,Imm,vm.to_uint());
+                                break;
+                    }break;
+
+                    case 0b000101:                                  //VMIN
+
+                    switch (funct3.to_uint()){ 
+                        case 0b000:                                 // Vector to Vector (vmin.vv)
+                                vmin_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                    }break;
+
+                    case 0b000111:                                  //VMAX
+
+                    switch (funct3.to_uint()){ 
+                        case 0b000:                                 // Vector to Vector (vmax.vv)
+                                vmax_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                    }break;
+
+                    case 0b000100:                                  //VMINU
+
+                    switch (funct3.to_uint()){ 
+                        case 0b000:                                 // Vector to Vector (vminu.vv)
+                                vminu_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                    }break;
+
+                    case 0b000110:                                  //VMAXU
+
+                    switch (funct3.to_uint()){ 
+                        case 0b000:                                 // Vector to Vector (vmaxu.vv)
+                                vmaxu_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
                                 break;
                     }break;
                            
@@ -121,13 +151,10 @@ SC_MODULE(Decode_Execution_Stage) {
         }
     
         
-         std::cout << "OPCODE: " << opcode << endl;
-         std::cout << "funct6: " << funct6 << endl;
-         std::cout << "vs1: " << vs1 << endl;
-         std::cout << "vs2: " << vs2 << endl;
-         std::cout << "vd: " << vd << endl;
+        //  std::cout << "OPCODE: " << opcode << endl;
+        //  std::cout << "funct6: " << funct6 << endl;
         
-        printf("\n\n\n");
+        //printf("\n\n\n");
     }
 };
 
