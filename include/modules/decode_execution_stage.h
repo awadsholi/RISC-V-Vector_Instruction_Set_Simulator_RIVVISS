@@ -79,6 +79,10 @@ SC_MODULE(Decode_Execution_Stage) {
                         case 0b000:                                 // Vector to Vector (vand.vv)
                                 vand_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
                                 break;
+                        case 0b011:                                 // Vector to Immediate (vand.vi)
+                                Imm=instruction_div.range(19,15).to_int();
+                                vand_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
+                                break;    
                     }break;
 
                     case 0b001010:                                  //Vor
@@ -87,6 +91,10 @@ SC_MODULE(Decode_Execution_Stage) {
                         case 0b000:                                 // Vector to Vector (vor.vv)
                                 vor_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
                                 break;
+                        case 0b011:                                 // Vector to Immediate (vor.vi)
+                                Imm=instruction_div.range(19,15).to_int();
+                                vor_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
+                                break;    
                     }break;
 
                     case 0b001011:                                   //Vxor
@@ -144,17 +152,48 @@ SC_MODULE(Decode_Execution_Stage) {
                                 vmaxu_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
                                 break;
                     }break;
-                           
+
+                    case 0b001100:                                  //VRGATHER
+
+                    switch (funct3.to_uint()){ 
+                        case 0b000:                                 // Vector to Vector (vrgather.vv)
+                                vrgather_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                        case 0b011:                                 // Vector to Immediate (vrgather.vi)
+                                uint8_t Imm = instruction_div.range(19,15).to_uint();
+                                vrgather_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
+                                break;
+                    }break;
+                    
+
+                    case 0b001110:                                  //VRGATHEREI16
+
+                    switch (funct3.to_uint()){ 
+                        case 0b000:                                 // Vector to Vector (vrgatherei16.vv)
+                                vrgatherei16_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                        case 0b011:                                 // Vector to Immediate (vslideup.vi )
+                                uint8_t Imm = instruction_div.range(19,15).to_uint();
+                                vslideup_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
+                                break;
+                    }break;
+
+
+                    case 0b001111:                                  //VSLIDEDOWN_VI
+
+                    switch (funct3.to_uint()){ 
+                        case 0b011:                                 // Vector to Immediate (vslidedown.vi )
+                                uint8_t Imm = instruction_div.range(19,15).to_uint();
+                                vslidedown_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
+                                break;
+                    }break;
+
+
                     
                 }
             break;
         }
     
-        
-        //  std::cout << "OPCODE: " << opcode << endl;
-        //  std::cout << "funct6: " << funct6 << endl;
-        
-        //printf("\n\n\n");
     }
 };
 
