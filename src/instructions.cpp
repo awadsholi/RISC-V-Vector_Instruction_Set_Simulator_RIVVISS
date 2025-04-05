@@ -281,3 +281,136 @@ void vslidedown_vi(Register_Status *register_status, uint8_t vd, uint8_t vs2, ui
 }
 
 
+void vsaddu_vv(Register_Status *register_status, uint8_t vd, uint8_t vs1, uint8_t vs2, uint8_t vm) {         //VSADDU_VV
+
+    printf("\nVsaddu.vv v%d = clamp((unsigned)v%d + (unsigned) v%d)\n",vd,vs2,vs1);
+    uint64_t sum;
+    uint64_t max_value;
+    if (register_status->vtype.SEW == 64) 
+        max_value = UINT64_MAX;
+    else 
+        max_value = (1ULL << register_status->vtype.SEW) - 1ULL;
+    
+    if (vm == 1) {  
+        for (uint64_t i = 0,j = 0; i < register_status->VL; i++, j+=reg_status->vtype.SEW) {
+            uint64_t vs2_val = register_status->Vector_Register[vs2].range(j + reg_status->vtype.SEW - 1, j).to_uint64();
+            uint64_t vs1_val = register_status->Vector_Register[vs1].range(j + reg_status->vtype.SEW - 1, j).to_uint64();
+
+            bool overflow = false;
+            if ((vs2_val > max_value - vs1_val))
+                overflow = true;
+            
+            sum = vs2_val + vs1_val;
+            if (overflow){
+                    register_status->Vector_Register[vd].range(j + reg_status->vtype.SEW - 1, j) = max_value;    
+            }
+            else 
+                 register_status->Vector_Register[vd].range(j + reg_status->vtype.SEW - 1, j) = sum;
+            } 
+
+    } else {}
+
+}
+
+
+void vsadd_vv(Register_Status *register_status, uint8_t vd, uint8_t vs1, uint8_t vs2, uint8_t vm) {             //VSADD_VV
+    printf("\nVsadd_vv v%d = clamp (v%d + v%d)\n", vd, vs2, vs1);
+    
+    int64_t sum;
+    int64_t max_val, min_val;
+
+    if (register_status->vtype.SEW == 64) {
+        max_val = INT64_MAX;   
+        min_val = INT64_MIN; 
+    } else {
+        max_val = (1LL << (register_status->vtype.SEW - 1)) - 1;   // Signed range based on SEW value
+        min_val = -(1LL << (register_status->vtype.SEW - 1));      
+    }
+    
+    if (vm == 1) {  
+        for (uint64_t i = 0, j = 0; i < register_status->VL; i++, j += reg_status->vtype.SEW) {
+            int64_t vs2_val = register_status->Vector_Register[vs2].range(j + reg_status->vtype.SEW - 1, j).to_int64();
+            int64_t vs1_val = register_status->Vector_Register[vs1].range(j + reg_status->vtype.SEW - 1, j).to_int64();
+            
+            bool overflow = false;
+            if ((vs1_val > 0 && vs2_val > max_val - vs1_val) || (vs1_val < 0 && vs2_val < min_val - vs1_val)) {
+                overflow = true;
+            }
+            
+            sum = vs2_val + vs1_val;
+            
+            if (overflow){
+                if(register_status->vtype.SEW == 64)
+                register_status->Vector_Register[vd].range(j + reg_status->vtype.SEW - 1, j) = (sum > 0) ? min_val : max_val;
+                else    
+                 register_status->Vector_Register[vd].range(j + reg_status->vtype.SEW - 1, j) = (sum > 0) ? max_val : min_val;
+            }
+            else 
+                register_status->Vector_Register[vd].range(j + reg_status->vtype.SEW - 1, j) = sum;
+            
+        }
+    } else {}
+}
+
+
+void vssubu_vv(Register_Status *register_status, uint8_t vd, uint8_t vs1, uint8_t vs2, uint8_t vm) {         //VSSUBU_VV
+
+    printf("\nVssubu.vv v%d = clamp((unsigned)v%d - (unsigned) v%d)\n",vd,vs2,vs1);
+    sc_bv<64> Zero = 0;
+    
+    if (vm == 1) {  
+        for (uint64_t i = 0,j = 0; i < register_status->VL; i++, j+=reg_status->vtype.SEW) {
+            uint64_t vs2_val = register_status->Vector_Register[vs2].range(j + reg_status->vtype.SEW - 1, j).to_uint64();
+            uint64_t vs1_val = register_status->Vector_Register[vs1].range(j + reg_status->vtype.SEW - 1, j).to_uint64();
+
+            if (vs2_val < vs1_val)      //underflow 
+                register_status->Vector_Register[vd].range(j + reg_status->vtype.SEW - 1, j) = Zero.range(reg_status->vtype.SEW - 1,0);    
+            else 
+                register_status->Vector_Register[vd].range(j + reg_status->vtype.SEW - 1, j) = vs2_val-vs1_val;    
+            
+
+            } 
+
+    } else {}
+
+}
+
+
+
+void vssub_vv(Register_Status *register_status, uint8_t vd, uint8_t vs1, uint8_t vs2, uint8_t vm) {             //VSSUB_VV
+    printf("\nVssub.vv v%d = clamp (v%d - v%d)\n", vd, vs2, vs1);
+    
+    int64_t sub;
+    int64_t max_val, min_val;
+
+    if (register_status->vtype.SEW == 64) {
+        max_val = INT64_MAX;   
+        min_val = INT64_MIN; 
+    } else {
+        max_val = (1LL << (register_status->vtype.SEW - 1)) - 1;   // Signed range based on SEW value
+        min_val = -(1LL << (register_status->vtype.SEW - 1));      
+    }
+    
+    if (vm == 1) {  
+        for (uint64_t i = 0, j = 0; i < register_status->VL; i++, j += reg_status->vtype.SEW) {
+            int64_t vs2_val = register_status->Vector_Register[vs2].range(j + reg_status->vtype.SEW - 1, j).to_int64();
+            int64_t vs1_val = register_status->Vector_Register[vs1].range(j + reg_status->vtype.SEW - 1, j).to_int64();
+            
+            bool overflow = false;
+            if ((vs2_val > 0 && vs1_val < 0 && vs2_val > max_val + vs1_val) || (vs2_val < 0 && vs1_val > 0 && vs2_val < min_val + vs1_val))    
+                overflow = true;
+                
+            sub = vs2_val - vs1_val;
+            
+            if (overflow){
+                if(register_status->vtype.SEW == 64)
+                register_status->Vector_Register[vd].range(j + reg_status->vtype.SEW - 1, j) = (sub > 0) ? min_val : max_val;
+                else    
+                 register_status->Vector_Register[vd].range(j + reg_status->vtype.SEW - 1, j) = (sub > 0) ? max_val : min_val;
+            }
+            else 
+                register_status->Vector_Register[vd].range(j + reg_status->vtype.SEW - 1, j) = sub;
+            
+        }
+    } else {}
+}

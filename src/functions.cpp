@@ -45,8 +45,19 @@ void printRegisterStatus(Register_Status *reg_status) {
             printf("Vector_Register[%d]: ",i);
 
             for (int j = 0; j < VLEN ; j=j+reg_status->vtype.SEW){
-      
-                printf("%d, ", reg_status->Vector_Register[i].range(j+reg_status->vtype.SEW-1 , j).to_int());
+
+                int64_t val = reg_status->Vector_Register[i].range(j + reg_status->vtype.SEW - 1, j).to_int64();  // sign-extended to 64 bits internally
+                switch (reg_status->vtype.SEW) {
+                    case 8:  printf("%d, ",  static_cast<int8_t>(val));  break;     //signed 8 bit 
+                    // case 8:  printf("%u, ",  static_cast<uint8_t>(val));  break;       //unsigned 8 bit 
+                    case 16: printf("%d, ",  static_cast<int16_t>(val)); break;        //signed 16 bit
+                    // case 16: printf("%u, ",  static_cast<uint16_t>(val)); break;       //unsigned 16 bit 
+                    case 32: printf("%d, ",  static_cast<int32_t>(val)); break;        //signed 32 bit 
+                    // case 32: printf("%u, ",  static_cast<uint32_t>(val)); break;       //unsigned 32 bit 
+                    case 64: printf("%lld, ", static_cast<long long>(val)); break;      //signed 64 bit
+                    // case 64: printf("%llu, ", static_cast<unsigned long long>(val)); break;      //unsigned 64 bit
+                }
+
             }
             printf("\n"); 
     }    
@@ -128,7 +139,12 @@ void ReadConfigurationFileParameters(){
         case 1:
             reg_status->vtype.SEW = 16; 
             break;
-        case 2:  
+        case 2:     
+            reg_status->vtype.SEW = 32; 
+            break;
+        case 3:     
+            reg_status->vtype.SEW = 64; 
+            break;
         default: 
             reg_status->vtype.SEW = 32; 
             break;

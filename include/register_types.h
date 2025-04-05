@@ -3,7 +3,7 @@
 #include <systemc.h>
 
 #define NUMBER_OF_REGISTERS 32
-#define VLEN 256
+#define VLEN 512
  
 typedef struct {
     int SEW;
