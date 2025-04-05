@@ -189,6 +189,39 @@ SC_MODULE(Decode_Execution_Stage) {
                     }break;
 
 
+                    case 0b100000:                                  //VSADDU
+
+                    switch (funct3.to_uint()){ 
+                        case 0b000:                                 // Vector to Vector (vsaddu.vv)
+                                vsaddu_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                    }break;
+
+                    case 0b100001:                                  //VSADD
+
+                    switch (funct3.to_uint()){ 
+                        case 0b000:                                 // Vector to Vector (vsadd.vv)
+                                vsadd_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                    }break;
+
+
+                    case 0b100010:                                  //VSSUBU
+
+                    switch (funct3.to_uint()){ 
+                        case 0b000:                                 // Vector to Vector (vssubu.vv)
+                                vssubu_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                    }break;
+
+                    case 0b100011:                                  //VSSUB
+
+                    switch (funct3.to_uint()){ 
+                        case 0b000:                                 // Vector to Vector (vssub.vv)
+                                vssub_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                    }break;
+
                     
                 }
             break;
