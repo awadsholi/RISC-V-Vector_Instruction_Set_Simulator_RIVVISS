@@ -1,0 +1,1217 @@
+* Data Memory:
+
+Memory is byte-addressable, but elements are packed into vector registers based on SEW:
+For SEW=8 (byte): Each element is 1 byte (no packing needed).
+
+For SEW=32 (word): 4 bytes form one element (e.g., addresses 0x0, 0x4, 0x8, etc., map to elements 0, 1, 2...).
+
+Example: Loading 4 elements into a vector register with SEW=32:
+
+Copy
+Memory Bytes: [B0][B1][B2][B3][B4][B5][B6][B7]...
+Vector Register (SEW=32): [B3:B2:B1:B0][B7:B6:B5:B4]
+
+vsetvli t0, a0, e32, m1  # SEW=32-bit, LMUL=1
+vle32.v v0, (a1)         # Load 32-bit elements (strides by 4 bytes) starting at byte address `a1`
+vle32.v v0, (a1) 
+
+Example: Loading a Vector Register
+Memory bytes: [B0][B1][B2][B3][B4][B5][B6][B7]...
+
+If SEW=32:
+
+Element 0 = B3 B2 B1 B0 (little-endian).
+
+Element 1 = B7 B6 B5 B4.
+
+RISC-V uses little-endian byte order: the least significant byte is at the lowest address.
+
+
+* Shifting in systemC: 
+
+For signed numbers in SystemC (sc_bigint), >> performs an arithmetic right shift, which is exactly what you need. You don't need to worry about logical shifts here because the type you're using (sc_bigint) handles signed numbers correctly with the >> operator.
+
+
+
+=========================================================================================================================================================
+Configurations: 
+=========================================================================================================================================================
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(1) vtype register(32-bit) : (Done reading)
+
+only first 10 bits are actively used to configure vector operations.
+
+SEW	|  LMUL	| EDIV	 | TA    |   MA   |	Rest of bits are ignored
+
+3-bits	| 3-bit | 2-bits | 1-bit | 1-bit  | 
+
+2:0     |  5:3	| 7:6    |  8	 |   9   | 
+
+Element Width (SEW) : 4 options 
+
+	000: 8 bits
+	001: 16 bits
+	010: 32 bits
+	011: 64 bits	others are reserved 
+
+ LMUL (Vector Register Grouping Multiplier):
+ 
+	000: LMUL = 1 (no grouping)
+	001: LMUL = 2 (group 2 registers, e.g., v0–v1, v2–v3, etc.)
+	010: LMUL = 4 (group 4 registers)
+	011: LMUL = 8 (group 8 registers)
+	111: LMUL = 1/2 (fractional grouping, e.g., v0 uses half of v1).
+	
+EDIV: Must write 0 to these bits.(ignored)
+
+TA (Tail Agnostic Policy): Defines what happens to elements beyond the current vl (tail elements) in a vector operation.
+	
+		0 (Tail Undisturbed): Tail elements retain their previous values.
+		1 (Tail Agnostic): Tail elements may be overwritten with any value (implementation-defined, often zeroed).
+
+MA (Mask Agnostic Policy): Defines what happens to elements masked off (inactive due to v0[i] = 0).
+
+		0 (Mask Undisturbed): Inactive elements retain their previous values.
+		1 (Mask Agnostic): Inactive elements may be overwritten with any value (often zeroed).
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(2) Vl (vector length) :determines how many elements are processed in a vector operation. It is dynamically configured by the vsetvl instruction .
+
+Example: 
+If vl = 4, a vadd.vv instruction adds 4 elements from two source registers and writes 4 elements to the destination register.
+
+Elements beyond vl (up to VLMAX) are called tail elements and follow the policy defined in vtype (either left unchanged or zeroed).
+
+VLMAX = (VLEN / SEW) * LMUL
+
+Vl = min(AVL, VLMAX).	Where AVL (Application Vector Length): The number of elements the program wants to process.
+
+Example 1: Basic Configuration
+
+Hardware: VLEN = 128 bits.
+Configuration: SEW = 32 bits, LMUL = 1.
+VLMAX = (128 / 32) * 1 = 4 elements.
+Case 1:
+AVL = 5 (program requests 5 elements).
+vl: min(5, 4) = 4 elements.
+Case 2:
+AVL = 3 (program requests 3 elements).
+vl: min(3, 4) = 3 elements.
+
+
+Code :
+
+(1) how vl might be implemented in your C simulator:
+typedef struct {
+    uint64_t vl;    // Vector length (number of elements)
+    uint64_t vtype; // Configuration (SEW, LMUL, etc.)
+    VectorRegister vreg[32]; // Vector registers v0-v31
+} VectorContext;
+
+// Set vl using vsetvl
+void execute_vsetvl(VectorContext *ctx, uint64_t avl) {
+    uint64_t sew = (ctx->vtype >> 2) & 0x7;  // SEW = 8*(1 << sew)
+    uint64_t lmul = (ctx->vtype >> 5) & 0x7; // LMUL = 1 << lmul
+    uint64_t vlen = 128; // Assume VLEN=128 bits (hardware-specific)
+
+    // Compute VLMAX
+    uint64_t vlmax = (vlen / (8 * (1 << sew))) * (1 << lmul);
+    ctx->vl = (avl > vlmax) ? vlmax : avl;
+}
+
+// Vector add using vl
+void execute_vadd(VectorContext *ctx, uint8_t vd, uint8_t vs1, uint8_t vs2) {
+    for (uint64_t i = 0; i < ctx->vl; i++) { // Process vl elements
+        ctx->vreg[vd].elements[i] = 
+            ctx->vreg[vs1].elements[i] + ctx->vreg[vs2].elements[i];
+    }
+}
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(3) V0 :is a special vector register that serves as the mask register. (Length of V0 is same as v1-v31 that determine by VLEN) 
+
+* if Vlen = 32 then all vectors registers are 32 bit wide 
+
+*Each bit in v0 determines whether a corresponding element in a vector operation is active (processed) or inactive (ignored or zeroed).
+
+Bit i = 1: Element i is active (operation is performed).
+Bit i = 0: Element i is inactive (operation is suppressed; destination may retain old values or be zeroed, depending on vtype).
+
+* v0 cannot be the destination of a non-mask instruction (e.g., vadd.vv v0, v1, v2 is invalid).
+* Exception: Instructions that write masks (e.g., vmsgt.vi v0, v4, 5) can target v0.
+
+* v0 uses 1 bit per element, regardless of SEW (Standard Element Width).
+* Example: If vl = 4, only the first 4 bits of v0 are used.
+
+Example:
+
+vl = 4, SEW = 32, v0 = {1, 0, 1, 0} (binary mask).
+v2 = {2, 3, 4, 5}, v3 = {1, 1, 1, 1}.
+
+v1[0] = 3 (active).
+v1[1] = 0 (inactive, zeroed due to MA=1).
+v1[2] = 5 (active).
+v1[3] = 0 (inactive).
+
+Example:
+
+Hardware: VLEN = 128 bits.
+Configuration: SEW = 32 bits, LMUL = 2 (groups 2 registers).
+vl: Set to 8 (process 8 elements).
+v0: Uses the first 8 bits to mask 8 elements. The remaining 120 bits are unused.
+
+HOW DID V0 TAKE A VALUE ?
+	
+	from vmsgt.vi v0, v1, 5 instruction? 
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(4) Scalar register 32 register (x0-x31) 
+	x0 :  Hardwired to zero (cannot be modified).
+	x1–x31: General-purpose registers (used for scalar values, addresses, etc.).
+
+=========================================================================================================================================================
+Instructions:
+=========================================================================================================================================================
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(1) vadd.vv vd,vs2,vs1			(////	Done	///)
+
+logic --> vd = vs2 + vs1 
+
+funct6	|  vm	| vs2	| vs1	 | funt3  |     vd  |	opcode
+
+6-bits	| 1-bit |5-bits | 5-bits | 3-bits | 5-bits  |	7-bits
+
+31-26   | 25	| 24-20 | 19-15	 | 14-12  | 11-7    |	6-0
+
+funct6 = 000000
+vm  = 0(enable masking) or 1 (disable masking) 
+vs2 =5-bits (choose from 31 registers v1->v31 ) v0 is special register
+vs1 = 5-bits
+funt3  = 000 (for vector-vector operations)
+vd = 5-bits 
+opcode = 1010111
+
+Example: vadd.vv vd, vs2, vs1, vm=m
+Assume:
+vl = 4 (process 4 elements).
+v0 = {1, 0, 1, 0} (mask bits for elements 0–3).
+vs1 = {2, 3, 4, 5}.
+vs2 = {1, 1, 1, 1}.
+Case 1: vm = 1 (Masking Disabled)
+All elements (0–3) are processed, regardless of v0.
+Result: vd = {3, 4, 5, 6} (full addition of all elements).
+Case 2: vm = 0 (Masking Enabled)
+Only elements where v0[i] = 1 (indices 0 and 2) are processed.
+Result:
+Elements 0 and 2: vd[0] = 3, vd[2] = 5.
+Elements 1 and 3: Remain unchanged (if destination policy is "agnostic") or set to zero (if policy is "zeroing").
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(2) vsub.vv vd,vs2,vs1			(////	Done	///)
+
+logic --> vd = vs2 - vs1 
+
+funct6	|  vm	| vs2	| vs1	 | funt3  |     vd  |	opcode
+
+6-bits	| 1-bit |5-bits | 5-bits | 3-bits | 5-bits  |	7-bits
+
+31-26   | 25	| 24-20 | 19-15	 | 14-12  | 11-7    |	6-0
+
+funct6 = 000010 (only difference)
+funt3  = 000 (for vector-vector operations)
+opcode = 1010111 (same as add)
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(3) vand.vv vd,vs2,vs1			(////	Done	////)
+
+logic --> vd = vs2 & vs1 
+
+funct6	|  vm	| vs2	| vs1	 | funt3  |     vd  |	opcode
+
+6-bits	| 1-bit |5-bits | 5-bits | 3-bits | 5-bits  |	7-bits
+
+31-26   | 25	| 24-20 | 19-15	 | 14-12  | 11-7    |	6-0
+
+funct6 = 001001 (only difference)
+funt3  = 000 (for vector-vector operations)
+opcode = 1010111 (same as add)
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(4) vor.vv vd,vs2,vs1			(////	Done	////)
+
+logic --> vd = vs2 | vs1 
+
+funct6	|  vm	| vs2	| vs1	 | funt3  |     vd  |	opcode
+
+6-bits	| 1-bit |5-bits | 5-bits | 3-bits | 5-bits  |	7-bits
+
+31-26   | 25	| 24-20 | 19-15	 | 14-12  | 11-7    |	6-0
+
+funct6 = 001010 (only difference)
+funt3  = 000 (for vector-vector operations)
+opcode = 1010111 (same as add)
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(5) vxor.vv vd,vs2,vs1			(////	Done	////)
+
+logic --> vd = vs2 ^ vs1 
+
+funct6	|  vm	| vs2	| vs1	 | funt3  |     vd  |	opcode
+
+6-bits	| 1-bit |5-bits | 5-bits | 3-bits | 5-bits  |	7-bits
+
+31-26   | 25	| 24-20 | 19-15	 | 14-12  | 11-7    |	6-0
+
+funct6 = 001011 (only difference)
+funt3  = 000 (for vector-vector operations)
+opcode = 1010111 (same as add)
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(6) vmv.v.v vd, vs1			(////	Done	////)
+
+logic --> vd[i] = vs1[i] for all active elements 
+
+If masking is enabled (e.g., vmv.v.v vd, vs1, v0.t), only elements where v0[i] = 1 are copied. Inactive elements follow the vtype policy (undisturbed or zeroed).
+
+funct6	|  vm	| vs2	| vs1	 | funt3  |     vd  |	opcode
+
+6-bits	| 1-bit |5-bits | 5-bits | 3-bits | 5-bits  |	7-bits
+
+31-26   | 25	| 24-20 | 19-15	 | 14-12  | 11-7    |	6-0
+
+funct6 = 010111 (only difference)
+vs2    = 00000: Hardwired to zero (unused, as vs1 is the sole source).
+funt3  = 000 (for vector-vector operations)
+opcode = 1010111 (same as add)
+
+Example:
+vmv.v.v v4, v2  # Copy all elements from v2 to v4 (up to vl)
+
+If vl = 4, copies v2[0..3] to v4[0..3].
+
+code:
+
+void execute_vmv_vv(VectorContext *ctx, uint8_t vd, uint8_t vs1, bool vm) {
+    for (uint64_t i = 0; i < ctx->vl; i++) {
+        // Check if element is active (vm=1 or v0[i] = 1)
+        bool is_active = vm || ((ctx->vreg[0].elements[i / 64] >> (i % 64)) & 1);
+        if (is_active) {
+            ctx->vreg[vd].elements[i] = ctx->vreg[vs1].elements[i];
+        } else {
+            // Handle inactive elements (e.g., zero if MA=1)
+            if (ctx->vtype & MASK_AGNOSTIC) {
+                ctx->vreg[vd].elements[i] = 0;
+            }
+        }
+    }
+}
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(7) vmv.v.i vd, imm			(////	Done	////)
+
+
+Immediate Range : The 5-bit immediate limits values to -16 ≤ imm ≤ 15.
+
+logic -->  vd[i] = sign-extended(imm) for all active elements
+
+If masking is enabled (e.g., vmv.v.i vd, imm, v0.t), only elements where v0[i] = 1 are updated. Inactive elements follow the vtype policy (undisturbed or zeroed).
+
+funct6	|  vm	| vs2	| imm	 | funt3  |     vd  |	opcode
+
+6-bits	| 1-bit |5-bits | 5-bits | 3-bits | 5-bits  |	7-bits
+
+31-26   | 25	| 24-20 | 19-15	 | 14-12  | 11-7    |	6-0
+
+funct6 = 010111: Identifies vmv.v.i.
+vs2    = 00000: Hardwired to zero (unused).
+imm[4:0]: 5-bit signed immediate.
+funct3 = 011: Indicates immediate operand.
+vm: Masking bit (0 = use v0, 1 = no masking).
+vd: Destination vector register.
+
+
+Example:
+
+vmv.v.i v4, 5  		# Set all elements of v4 to 5 (sign-extended to SEW)
+
+If SEW = 32 and vl = 4, v4 becomes {5, 5, 5, 5}.
+
+Example 2: Masked Immediate Move
+
+vmv.v.i v4, -2, v0.t  # Set v4[i] = -2 only where v0[i] = 1
+only elements where v1[i] > 0 are set to -2; others follow vtype policies.
+
+Code: 
+
+void execute_vmv_vi(VectorContext *ctx, uint8_t vd, int8_t imm, bool vm) {
+    // Sign-extend the 5-bit immediate to SEW bits
+    uint64_t sew = (ctx->vtype >> 2) & 0x7;  // SEW = 8*(1 << sew)
+    uint64_t imm_sext = (int64_t)(imm << (64 - 5)) >> (64 - (8 * (1 << sew)));
+
+    for (uint64_t i = 0; i < ctx->vl; i++) {
+        // Check if element is active (vm=1 or v0[i] = 1)
+        bool is_active = vm || ((ctx->vreg[0].elements[i / 64] >> (i % 64)) & 1);
+        if (is_active) {
+            ctx->vreg[vd].elements[i] = imm_sext;
+        } else {
+            // Handle inactive elements (e.g., zero if MA=1)
+            if (ctx->vtype & MASK_AGNOSTIC) {
+                ctx->vreg[vd].elements[i] = 0;
+            }
+        }
+    }
+}
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(8) Vadd.vi vd,vs2, imm		(////	Done	////)
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(9) vrsub.vi vd, vs2, imm	(////	Done	////)
+
+ logic : vd[i] = imm - vs2[i].
+ 
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | imm[4:0]| funct3  | vd     | opcode  |
+| 000011   |1  | vs2     | imm     | 011     | vd     | 1010111 |
+
+opcodev : 1010111	
+funct3	[14:12]	011	
+funct6	[31:26]	000011	
+vm	[25]	0 or 1
+imm	[19:15]	imm[4:0]	5-bit signed immediate (-16 to +15)
+vs2	[24:20]	vs2	
+vd	[11:7]	vd	
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(10) vle32.v vd,(rs1) "Vetor load 32-bit element"
+
+logic --> vd = mem(rs1) 
+
+funct6	|  vm	| vs2	| vs1	 | funt3  |     vd  |	opcode
+
+31-26   | 25	| 24-20 | 19-15	 | 14-12  | 11-7    |	6-0
+
+000000  | 1 	| 00000 | rs1	 | 110 	  | vd	    | 0000111
+	   (no stride register)
+	   
+The loaded elements will be determined by Vl.
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(11) vmsgt.vi v0, v1, 5 "Vector Mask Set Greater Than"
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | imm[4:0]| funct3  | vd     | opcode  |
+| 011001   |1  | 00001   | 00101   | 011     | 00000  | 1010111 |
+
+funct6: 011001 (identifies vmsgt.vi).
+vm: 1 (masking disabled).
+vs2: 00001 (source vector register v1).
+imm[4:0]: 00101 (5-bit signed immediate 5).
+funct3: 011 (indicates immediate operand).
+vd: 00000 (destination mask register v0).
+opcode: 1010111 (OP-V major opcode).
+
+#For each element i in the vector register v1, up to the current vector length vl if v1[i] > sign_extended(5) -> Set v0[i] = 1 if true, else v0[i] =0.
+	
+Example Scenario
+Configuration: SEW = 32, vl = 4, v1 = {10, 3, -2, 6}.
+
+Immediate: 5 (sign-extended to 0x00000005).
+
+Result:
+v0 = {1, 0, 0, 1} 
+
+
+Code :
+
+void execute_vmsgt_vi(VectorContext *ctx, uint8_t vd, uint8_t vs1, int8_t imm) {
+    // Get SEW from vtype (e.g., 8, 16, 32, 64)
+    uint64_t sew = (ctx->vtype >> 2) & 0x7;
+    uint64_t sew_bits = 8 * (1 << sew); // Convert to bits (e.g., 8 << 2 = 32)
+
+    // Sign-extend the 5-bit immediate to SEW bits
+    int64_t imm_sext = (int64_t)(imm << (64 - 5)) >> (64 - sew_bits);
+
+    for (uint64_t i = 0; i < ctx->vl; i++) {
+        // Extract element from vs1 (v1)
+        int64_t elem = (int64_t)ctx->vreg[vs1].elements[i];
+        
+        // Compare and set mask bit in v0
+        ctx->vreg[vd].elements[i] = (elem > imm_sext) ? 1 : 0;
+    }
+}
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+ (12)  vmsgt.vv v0, vs2, vs1  # v0[i] = (vs2[i] > vs1[i]) ? 1 : 0
+ 
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 011011   |1  | vs2     | vs1     | 000     | 00000  | 1010111 |
+     
+funct6: 011011 (identifies vmsgt.vv).
+vm: 1 (masking disabled).
+vs2: Source vector register (e.g., v2 → 00010).
+vs1: Source vector register (e.g., v3 → 00011).
+funct3: 000 (indicates vector-vector operation).
+vd: 00000 (destination mask register v0).
+opcode: 1010111 (OP-V major opcode).
+ 
+ 
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+ (13)  vmsgt.vx v0, vs2, x5   # v0[i] = (vs2[i] > x5(scalar register)) ? 1 : 0
+ 
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | rs1     | funct3  | vd     | opcode  |
+| 011010   |1  | vs2     | x5      | 100     | 00000  | 1010111 |
+
+ funct6: 011010 (identifies vmsgt.vx).
+ vm: 1 (masking disabled).
+ vs2: Source vector register (e.g., v2 → 00010).
+ rs1: Scalar register (e.g., x5 → 00101).
+ funct3: 100 (indicates scalar operand).
+ vd: 00000 (destination mask register v0).
+ opcode: 1010111 (OP-V major opcode).
+     
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(14) vmseq.vv  v0, v1, v2   # v0[i] = (v1[i] == v2[i])
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 011000   |1  | 00010   | 00001   | 000     | 00000  | 1010111 |
+
+funct6: 011000 (identifies vmseq.vv).
+vm: 1 (masking disabled).
+vs2: 00010 (source vector register v2).
+vs1: 00001 (source vector register v1).
+funct3: 000 (vector-vector operation).
+vd: 00000 (destination mask register v0).
+opcode: 1010111 (OP-V major opcode).
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(15) vmand.mm  v0, v0, v4    # v0[i] &= v4[i] (combine masks)
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 100101   |1  | 00000   | 00100   | 010     | 00000  | 1010111 |
+
+funct6: 100101 (identifies vmand.mm).
+vm: 1 (masking disabled).
+vs2: 00000 (source mask register v0).
+vs1: 00100 (source mask register v4).
+funct3: 010 (mask-mask operation).
+vd: 00000 (destination mask register v0).
+opcode: 1010111 (OP-V major opcode).
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(16) vmsne.vi v0, v1, 5		#v0[i] = 1 if v1[i] ≠ 5
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | imm[4:0]| funct3  | vd     | opcode  |
+| 011001   |1  | 00001   | 00101   | 011     | 00000  | 1010111 |
+
+funct6: 011001 (identifies vmsne.vi).
+vm: 1 (masking disabled).
+vs2: 00001 (source vector register v1).
+imm: 00101 (5-bit signed immediate 5).
+funct3: 011 (immediate operand).
+vd: 00000 (destination mask register v0).
+opcode: 1010111 (OP-V major opcode).
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(17) vmslt.vx v0, v1, x5	# v0[i] = 1 if v1[i] < x5
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | rs1     | funct3  | vd     | opcode  |
+| 011011   |1  | 00001   | 00101   | 100     | 00000  | 1010111 |
+
+funct6: 011011 (identifies vmslt.vx).
+vm: 1 (masking disabled).
+vs2: 00001 (source vector register v1).
+rs1: 00101 (source scalar register x5).
+funct3: 100 (scalar operand).
+vd: 00000 (destination mask register v0).
+opcode: 1010111 (OP-V major opcode).
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(18) vmsle.vv v0, v1, v2       # v0[i] = 1 if v1[i] ≤ v2[i] 
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 011101   |1  | 00001   | 00010   | 000     | 00000  | 1010111 |
+
+funct6: 011101 (identifies vmsle.vv).
+vm: 1 (masking disabled).
+vs2: 00001 (source vector register v1).
+vs1: 00010 (source vector register v2).
+funct3: 000 (vector-vector operation).
+vd: 00000 (destination mask register v0).
+opcode: 1010111 (OP-V major opcode).
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(19) vmsge.vx v0, v1, x6      # v0[i] = 1 if v1[i] ≥ x6
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | rs1     | funct3  | vd     | opcode  |
+| 011101   |1  | 00001   | 00110   | 100     | 00000  | 1010111 |
+
+funct6: 011101 (identifies vmsle.vx).
+vm: 1 (masking disabled).
+vs2: 00001 (source vector register v1).
+rs1: 00110 (source scalar register x6).
+funct3: 100 (scalar operand).
+vd: 00000 (destination mask register v0).
+opcode: 1010111 (OP-V major opcode).
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(20) vsetvl rd, rs1, rs2  	# rd = new vl, vtype = value from rs1(that determine SEW,LMUL,TA,MA), AVL = rs2
+
+rd,rs1,and rs2 are scalar registers
+
+| 31        25 | 24   20 | 19   15 | 14  12 | 11   7 | 6      0 |
+|   funct7     |   rs2   |   rs1   | funct3 |   rd   |  opcode  |
+|   0b1000000  |  rs2    |  rs1    | 0b111  |   rd   | 0b1110011|
+
+funct7 (7 bits): 0b1000000 .
+rs2 (5 bits): Source register for AVL (e.g., a1 = x11 → 0b01011).
+rs1 (5 bits): Source register for vtype (e.g., a2 = x12 → 0b01100).
+funct3 (3 bits): 0b111 (identifies vsetvl).
+rd (5 bits): Destination register (e.g., a0 = x10 → 0b01010).
+opcode (7 bits): 0b1110011 (SYSTEM opcode).
+
+Example : # Configure vl and vtype:
+# - AVL = 10 (requested elements, stored in scalar register a2)
+# - vtype = SEW=32, LMUL=1 (stored in scalar register a1)
+vsetvl a0, a1, a2   # a0 = min(10, VLMAX=4) → vl=4
+
+a0 (scalar register): Contains vl=4.
+vtype CSR: Updated with the configuration from a1.
+
+Code :
+void execute_vsetvl(VectorContext *ctx, uint8_t rd, uint8_t rs1, uint8_t rs2) {  
+    // Read AVL from scalar register rs2  
+    uint64_t avl = ctx->scalar_reg[rs2];  
+
+    // Read vtype configuration from scalar register rs1  
+    uint64_t new_vtype = ctx->scalar_reg[rs1];  
+
+    // Compute VLMAX from new_vtype  
+    uint64_t sew = (new_vtype >> 2) & 0x7;  // SEW = 8*(1 << sew)  
+    uint64_t lmul = (new_vtype >> 5) & 0x7; // LMUL = 1 << lmul  
+    uint64_t vlmax = (VLEN / (8 * (1 << sew))) * (1 << lmul);  
+
+    // Set new vl  
+    ctx->vl = (avl > vlmax) ? vlmax : avl;  
+
+    // Update vtype CSR  
+    ctx->vtype = new_vtype;  
+
+    // Write vl to scalar register rd  
+    ctx->scalar_reg[rd] = ctx->vl;  
+}  
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(21) vxor.vx v1, v2, x5  # v1[i] = v2[i] XOR x5 (sign-extended to SEW)
+
+funct3 =100
+same as vxor in opcode and funct6
+
+funct6 | vm | vs2 | rs1 | funct3 | vd   | opcode
+001011 | 1  | v2  | x5  | 100    | v1   | 1010111
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(22) vxor.vi v1, v2, 5  # v1[i] = v2[i] XOR 5 (sign-extended to SEW)		(//////	 DONE 	/////)
+
+funct3 =011
+same as vxor in opcode and funct6
+
+funct6 | vm | vs2 | imm | funct3 | vd   | opcode
+001011 | 1  | v2  | 5   | 011    | v1   | 1010111
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(23) vrsub.vx vd, vs2, rs1, vm   # vd[i] = x[rs1] - vs2[i]
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | rs1     | funct3  | vd     | opcode  |
+| 000011   |vm | vs2     | rs1     | 100     | vd     | 1010111 |
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(24) vsub.vx vd, vs2, rs1, vm 	# vd[i] =  vs2[i] - x[rs1] 
+ 
+ [31:26] funct6 (000010) | [25] vm | [24:20] vs2 | [19:15] rs1 | [14:12] funct3 (100) | [11:7] vd | [6:0] opcode (1010111)
+ 
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(25) vminu.vv  v0,v1,v2 	#V0[i] = min(unsigned(v1[i]) , unsigned(v1[i])	(//////	 DONE 	/////)
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 000100   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(26) vmin.vv	v3,v4,v5 	#V3[i] = min(v4[i] , v5[i])			(//////	 DONE 	/////)
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 000101   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+example : 
+vmin.vv	vs2 = [-1, 100, -5, 50] ,vs1 = [1, -100, 3, 100]	
+vd = [-1, -100, -5, 50]
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(27) vmaxu.vv	v6,v7,v8	#V6[i] = max(unsigned(v7[i]) , unsigned(v8[i])	(//////	 DONE 	/////)
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 000110   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+Example:
+vmaxu.vv 	vs2 = [-1, 100, -5, 50] ,vs1 = [1, -100, 3, 100]		Unsigned Maximum
+		vs2 = [255, 100, 251, 50] , vs1 = [1, 156, 3, 100]		
+vd = [255, 156, 251, 100]
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(28) vmax.vv	v9,v10,v11	#V9[i] = max(v10[i] , v11[i])			(//////	 DONE 	/////)
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 000111   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+Example : 
+Instruction	Operation	 Inputs	
+vmax.vv	Signed Maximum	vs2 = [-1, 100, -5, 50] ,vs1 = [1, -100, 3, 100]	
+
+Vd = [1, 100, 3, 100]
+	
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(29) vrgather.vv vd, vs, vi							(//////	 DONE 	/////)
+	
+Logic : vrgather.vv v10, v2, v4		#V10[i] =v2[v4[i]]	
+
+* Vi elements are treated as unsigned int 
+* vd[i] = vs[vi[i]] if vi[i] < VLMAX regardless of vl if vi[i] >= vlmax -> vd[i]=0
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 001100   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+Example: 
+vs2 = [10, 20, 30, 40, 50, 60, 70, 80]
+vi = [3, 4, 1, 7, 3, 2, 5, 1]
+vl = 4
+
+vd[0] = vs2[3] = 40
+vd[1] = vs2[4] = 50
+vd[2] = vs2[1] = 20
+vd[3] = vs2[7] = 80
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(30) vrgatherei16.vv vd, vs, vi							(//////	 DONE 	/////)
+
+only 16 bit for index 
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | Imm     | funct3  | vd     | opcode  |
+| 001110   |vm | vs2     | Imm     | 000     | vd     | 1010111 |
+
+if SEW=32 then each element represent 2 indices , index 0 = (15,0) bit and index 1 = (31,16)
+if SEW=8 then every 2 elements represent one index 
+
+if we have vl=8, VLEN = 64 ,LMUL=1 and each element is 8 bit then we have only 4 indices (from 0 to 3) and indices from 4 to 7 are not processed (because 64/16 =4 )  
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(31) vslideup.vi v5,v2,3							(//////	 DONE 	/////)
+
+# the first uimm elements of vd are left unchanged. and Elements from vs2[0] to vs2[vl - uimm - 1] are copied into vd starting at index uimm
+If uimm ≥ vl, vd remains unchanged.
+
+# If uimm = 0, the entire vd is overwritten by vs2
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | Imm     | funct3  | vd     | opcode  |
+| 001110   |vm | vs2     | Imm     | 011     | vd     | 1010111 |
+
+Example: 
+vs2 = [10, 20, 30, 40, 50, 60, 70, 80]
+vd = [A, B, C, D, E, F, G, H]
+
+vd[3] = vs2[0] = 10
+vd[4] = vs2[1] = 20
+vd[5] = vs2[2] = 30
+vd[6] = vs2[3] = 40
+vd[7] = vs2[4] = 50
+
+vd becomes [A, B, C, 10, 20, 30, 40, 50]
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+(32) vslidedown.vi v6,v2,2							(//////	 DONE 	/////)
+
+# The first vl - uimm elements of vd are filled with vs2[uimm] to vs2[vl - 1].
+
+# The remaining elements (from index vl - uimm onward) are left unchanged.
+
+# If uimm ≥ vl, vd remains unchanged.
+
+# If uimm = 0, vd is fully overwritten by vs2.
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | Imm     | funct3  | vd     | opcode  |
+| 001111   |vm | vs2     | Imm     | 011     | vd     | 1010111 |
+
+Example: 
+vs2 = [10, 20, 30, 40, 50, 60, 70, 80]
+vd = [A, B, C, D, E, F, G, H]
+
+The first vl - uimm = 6 elements of vd (indices 0–5) are filled with vs2[2] to vs2[7]:
+vd[0] = vs2[2] = 30
+vd[1] = vs2[3] = 40
+vd[2] = vs2[4] = 50
+vd[3] = vs2[5] = 60
+vd[4] = vs2[6] = 70
+vd[5] = vs2[7] = 80
+The last 2 elements (indices 6–7) remain unchanged : vd becomes [30, 40, 50, 60, 70, 80, G, H]
+
+-----------------------------------------------------------------------------------------------------------
+(33) vadc.vvm vd, vs2, vs1, v0
+
+# Add elements from two vector regestires with carry-in from v0, writing results to a vector register.
+
+# vd[i] = vs2[i] + vs1[i] + v0.mask[i]
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 010000   |0  | vs2     | vs1     | 000     | vd     | 1010111 |
+
+
+EXAMPLE:
+
+consider sew = 4 bits, vl = 2 bits
+v0.mask = [1, 0] (carry-in for element 0 is 1, and for element 1 is 0)
+vs2 = [0b1000 (8), 0b1111 (15)]
+vs1 = [0b1000 (8), 0b0001 (1)]
+
+
+Element 0: 8 + 8 + 1(carry in) = 17 → represented as 1 0001 ---> 0b0001 (1 in 4 bits), and carry-out = 1
+Element 1: 15 + 1 + 0(carry in ) = 16 → represented as 1 0000 ---> 0b0000 (0 in 4 bits), and carry-out = 1
+vd = [0b0001, 0b0000].
+
+-----------------------------------------------------------------------------------------------------------
+(34)  vmadc.vvm vd, vs2, vs1, v0
+
+# Compute carry-out of addition of two vectors (with a carry-in) as a mask bit. so the mask bit will hold the carry-out value.
+# vd.mask[i] = carry_out(vs2[i] + vs1[i] + v0.mask[i])
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 010001   |0  | vs2     | vs1     | 000     | vd     | 1010111 |
+
+
+EXAMPLE:
+
+consider sew = 4, and vl = 2
+
+vs2 = [0b1000 (8), 0b1111 (15)].
+vs1 = [0b1000 (8), 0b0001 (1)].
+v0.mask = [1, 0].
+
+
+Element 0: 8 + 8 + 1 = 17 → carry-out 1.
+Element 1: 15 + 1 + 0 = 16 → carry-out 1.
+vd.mask = [1, 1].
+
+-----------------------------------------------------------------------------------------------------------
+(35) vmadc.vv vd, vs2, vs1 
+
+# Compute carry-out of addition of two vectors (without a carry-in) as a mask bit. so the mask bit will hold the carry-out value.
+# vd.mask[i] = carry_out(vs2[i] + vs1[i])
+# The only change here from the previous one is that the mask bit is disabled (1).
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 010001   |1  | vs2     | vs1     | 000     | vd     | 1010111 |
+
+EXAMPLE:
+
+sew = 4, and vl = 2
+vs2 = [0b1111 (15), 0b0111 (7)].
+vs1 = [0b0001 (1), 0b0001 (1)].
+NO CARRY-IN
+
+Element 0: 15 + 1 = 16 → carry-out = 1
+Element 1: 7 + 1 = 8 → carry-out = 0 (no overflow in 4 bits)
+vd.mask = [1, 0].
+
+-----------------------------------------------------------------------------------------------------------
+(36) vsbc.vvm vd, vs2, vs1, v0
+
+# Subtracting two vectors with borrow in from v0 and store it in vd.
+# vd[i] = vs2[i] - vs1[i] - v0.mask[i]
+# if we have sew = 4 bits so the range for unsigned values is 0-15 so any value not in the range a modulo of 16 will be taken for it
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 010010   |0  | vs2     | vs1     | 000     | vd     | 1010111 |
+
+EXAMPLE:
+
+vs2 = [0b0101 (5), 0b0011 (3)]
+vs1 = [0b0011 (3), 0b0101 (5)]
+v0.mask = [0b1, 0b0] (borrow-in: 1 for element 0, 0 for element 1)
+
+
+Element 0: 5 - 3 - 1 = 1 → Result: 0b0001 (1 in 4 bits).
+Borrow-out: 0 (no borrow needed).
+
+Element 1: 3 - 5 - 0 = -2 → Wraps to 0b1110 (14 in 4 bits).
+
+    0b0011 (3)  
+  - 0b0101 (5)  
+  - 0b0000 (borrow-in)
+-----------------
+
+we start from the LSB:
+* 1-1 (no borrow needed) = 0
+* 1-0 (no borrow needed) = 1
+* 0-1 -(can't do this so we borrow from the next higher bit)
+      -(since the 3rd bit of "0b001" is zero so we can't borrow and the subtraction underflows)
+
+Hence, the result is 3-5 = -2 ---> wrapping it up to -2 mod 16 = 14 = 0b1110
+Since we have a negative result before wrapping so the borrow-out = 1
+
+-----------------------------------------------------------------------------------------------------------
+(37) vmsbc.vvm vd, vs2, vs1, v0
+
+# Find the borrow-out from Subtracting two vectors with borrow in from v0 and store it as a mask bit.
+# vd.mask[i] = borrow_out(vs2[i] - vs1[i] - v0.mask[i])
+# The same as previous one but here the result is the borrow-out and it is saved as a mask bit.
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 010011   |0  | vs2     | vs1     | 000     | vd     | 1010111 |
+
+EXAMPLE:
+
+vs2 = [0b1000 (8), 0b0011 (3)]
+vs1 = [0b0101 (5), 0b0101 (5)]
+v0.mask = [0b0, 0b1] (borrow-in: 0 for element 0, 1 for element 1).
+
+
+Element 0:8 - 5 - 0 = 3 → No borrow (borrow_out = 0).
+Element 1:3 - 5 - 1 = -3 → Wraps to 0b1101 (13), but borrow-out is 1 "since the result before wrapping was negative".
+Hence, vd.mask = [0b0, 0b1]
+
+-----------------------------------------------------------------------------------------------------------
+(38) vmsbc.vv vd, vs2, vs1
+
+# Find the borrow-out from Subtracting two vectors only (without borrow-in) and store it as a mask bit.
+# vd.mask[i] = borrow_out(vs2[i] - vs1[i])
+# The only change from previous one that there is no borrow-in.
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 010011   |1  | vs2     | vs1     | 000     | vd     | 1010111 |
+
+EXAMPLE:
+
+vs2 = [0b1111 (15), 0b0011 (3)]
+vs1 = [0b0001 (1), 0b0101 (5)]
+
+
+Element 0:15 - 1 = 14 → No borrow (borrow_out = 0).
+Element 1:3 - 5 = -2 → Borrow-out: 1.
+Hence, vd.mask = [0b0, 0b1]
+
+-----------------------------------------------------------------------------------------------------------
+(39) vmerge.vvm vd, vs2, vs1, v0
+
+# Merge elements from two vector registers (vs1 and vs2) based on the mask v0.
+# vd[i] = v0.mask[i] ? vs1[i] : vs2[i]
+# if mask bit is 1 so vd = vs1 else vd = vs2 (here we call vs2 as it is the 1st operand and vs1 2nd operand)
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 010111   |0  | vs2     | vs1     | 000     | vd     | 1010111 |
+
+EXAMPLE:
+
+consider sew=32 and vl=2
+vs2 = [0x12345678, 0x9ABCDEF0]
+vs1 = [0x11112222, 0x33334444]
+v0.mask = [1, 0] (mask for elements 0 and 1).
+
+
+Element 0: v0.mask[0] = 1 → vd[0] = vs1[0] = 0x11112222.
+Element 1: v0.mask[1] = 0 → vd[1] = vs2[1] = 0x9ABCDEF0.
+Final vd: [0x11112222, 0x9ABCDEF0].
+
+-----------------------------------------------------------------------------------------------------------
+(40) vmsne.vv vd, vs2, vs1, vm
+
+# Compare elements of vs2 and vs1. If unequal, set the mask bit to 1.
+# vd.mask[i] = (vs2[i] != vs1[i]) ? 1 : 0
+# If the condition logic is true the mask bit set to 1, else 0.
+# if vm=1 it is disbaled and we process all elements up to vl, else if vm=0 we process only elements where v0.mask[i] = 1.
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 011001   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+EXAMPLE [1]:
+
+Consider sew=32, vl=2, and vm=1 (disabled)
+vs2 = [0x12345678, 0x9ABCDEF0].
+vs1 = [0x12345678, 0x12345678].
+
+
+Element 0: 0x12345678 == 0x12345678 → Equal → vd.mask[0] = 0.
+Element 1: 0x9ABCDEF0 != 0x12345678 → Not Equal → vd.mask[1] = 1.
+vd.mask = [0b0, 0b1]
+
+EXAMPLE [2]:
+
+vs2 = [0x11111111, 0x22222222].
+vs1 = [0x11111111, 0x33333333].
+v0.mask = [0, 1] (process only element 1, element 0 masked out).
+
+
+Element 1: 0x22222222 != 0x33333333 → vd.mask[1] = 1.
+Element 0: Not processed (masked out).
+vd.mask = [X, 1]  # X = undefined (agnostic policy for masked-out elements).
+-----------------------------------------------------------------------------------------------------------
+(41) vmsne.vi vd, vs2, imm, vm
+
+# Compare elements of vs2 and a 5-bit sign-extended immediate. If unequal, set the mask bit to 1.
+# vd.mask[i] = (vs2[i] != imm) ? 1 : 0
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 011001   |vm | vs2     | vs1     | 011     | vd     | 1010111 |
+
+EXAMPLE:
+
+vs2 = [0x00000005, 0x00000006] (32-bit values).
+imm = 5 (5-bit immediate → sign-extended to 0x00000005).
+
+
+Element 0: 0x00000005 == 0x00000005 → Equal → vd.mask[0] = 0.
+Element 1: 0x00000006 != 0x00000005 → Not Equal → vd.mask[1] = 1.
+vd.mask = [0b0, 0b1]
+
+-----------------------------------------------------------------------------------------------------------
+(42) vmsltu.vv vd, vs2, vs1, vm 
+
+# Compare elements of vs2 and vs1 as unsigned integers and Set mask bit to 1 if vs2[i] < vs1[i].
+# vd.mask[i] = (vs2[i] < vs1[i]) ? 1 : 0 (unsigned)
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 011010   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+EXAMPLE:
+
+vs2 = [0x00000002, 0x80000000] ---> Unsigned: 2, 2147483648
+vs1 = [0x00000003, 0x7FFFFFFF] ---> Unsigned: 3, 2147483647
+
+
+Element 0: 2 < 3 → True → vd.mask[0] = 1.
+Element 1: 2147483648 < 2147483647 → False → vd.mask[1] = 0.
+vd.mask = [1, 0]
+
+-----------------------------------------------------------------------------------------------------------
+(43) vmslt.vv vd, vs2, vs1, vm
+
+# Compare elements of vs2 and vs1 as signed integers (2's complement) and Set mask bit to 1 if vs2[i] < vs1[i].
+# vd.mask[i] = (vs2[i] < vs1[i]) ? 1 : 0 (signed)
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 011011   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+EXAMPLE:
+
+vs2 = [0x80000000, 0x7FFFFFFF] ---> Signed: -2147483648, 2147483647
+vs1 = [0x7FFFFFFF, 0x80000000] ---> Signed: 2147483647, -2147483648
+
+
+Element 0: -2147483648 < 2147483647 → True → vd.mask[0] = 1.
+Element 1: 2147483647 < -2147483648 → False → vd.mask[1] = 0.
+vd.mask = [1, 0]
+
+-----------------------------------------------------------------------------------------------------------
+(44) vmsleu.vv vd, vs2, vs1, vm
+
+# Compare elements of vs2 and vs1 as unsigned integers. Set mask bit to 1 if vs2[i] <= vs1[i].
+# vd.mask[i] = (vs2[i] <= vs1[i]) ? 1 : 0 (unsigned)
+# The only change from previous one is that the comparison condition is "less or equal"
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 011100   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+EXAMPLE:
+
+vs2 = [0x00000002, 0x00000003] ---> Unsigned: 2, 3
+vs1 = [0x00000002, 0x00000002] ---> Unsigned: 2, 2
+
+
+Element 0: 2 <= 2 → True → vd.mask[0] = 1.
+Element 1: 3 <= 2 → False → vd.mask[1] = 0.
+vd.mask = [1, 0]
+
+-----------------------------------------------------------------------------------------------------------
+(45) vmsle.vv vd, vs2, vs1, vm 
+
+# Compare elements of vs2 and vs1 as signed integers (2's complement). Set mask bit to 1 if vs2[i] <= vs1[i].
+# vd.mask[i] = (vs2[i] <= vs1[i]) ? 1 : 0 (signed)
+
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 011101   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+EXAMPLE:
+
+vs2 = [0xFFFFFFFF, 0x7FFFFFFF] ---> Signed: -1, 2147483647
+vs1 = [0xFFFFFFFF, 0x80000000] ---> Signed: -1, -2147483648
+
+
+Element 0: -1 <= -1 → True → vd.mask[0] = 1.
+Element 1: 2147483647 <= -2147483648 → False → vd.mask[1] = 0.
+vd.mask = [1, 0]
+
+-----------------------------------------------------------------------------------------------------------
+NOTICE:
+
+.mask: A packed array of 1-bit values stored in a vector register and it is just a "representation"
+
+.t: "Syntax" to use a register’s packed bits as a mask in instructions
+-----------------------------------------------------------------------------------------------------------
+
+(46)  vadc.vim vd, vs2, imm, v0 
+
+# 
+
+-----------------------------------------------------------------------------------------------------------
+(47) vsaddu.vv v4, v2, v3  	 # v4[i] = clamp(v2[i] + v3[i], 0, 255)		(//////	 DONE 	/////)
+
+# values can't go beyond limit 
+
+# If v2[i] = 200 (unsigned) and v3[i] = 100 : Result: 300 → clamped to 255 (stored in v4[i]).
+# unsigned integers
+
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 100000   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+Examples : 
+
+a = [200, 150, 50, 250]  # Source vector 1 (unsigned)
+b = [100, 100, 100, 100] # Source vector 2 (unsigned)
+result = [255, 250, 150, 255] 
+
+-----------------------------------------------------------------------------------------------------------
+(48) vsadd.vv v5, v2, v3   # v5[i] = clamp(v2[i] + v3[i], -128, 127)		(//////	 DONE 	/////)
+
+If v2[i] = 100 (signed) and v3[i] = 100 : Result: 200 → clamped to 127 (stored in v5[i]).
+
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 100001   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+Examples: 
+
+a = [100, 100, -50, -128]  # Source vector 1 (signed)
+b = [100, -100, -100, -1]  # Source vector 2 (signed)
+result = [127, 0, -128, -128]  # Clamped at extremes
+
+-----------------------------------------------------------------------------------------------------------
+(49) vssubu.vv v6, v2, v3   # v6[i] = clamp(v2[i] - v3[i], 0, 255)		(//////	 DONE 	/////)
+
+# If v2[i] = 50 and v3[i] = 100 : Result: -50 → clamped to 0 (stored in v6[i]).
+# unsigned integers
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 100010   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+Examples: 
+
+a = [50, 200, 100, 5]  # Source vector 1 (vs2)		(vs2 - vs1)
+b = [100, 150, 50, 10] # Source vector 2 (vs1)
+result = [0, 50, 50, 0]  # Clamped at 0 on underflow
+
+
+-----------------------------------------------------------------------------------------------------------
+(50) vssub.vv v7, v2, v3   # v7[i] = clamp(v2[i] - v3[i], -128, 127)		(//////	 DONE 	/////)
+
+# If v2[i] = -128 and v3[i] = 1 : Result: -129 → clamped to -128 (stored in v7[i]).
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 100011   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+Examples: 
+
+a = [100, -100, -128, 50]  # Source vector 1 (vs2)
+b = [-100, 50, 1, 120]     # Source vector 2 (vs1)
+result = [127, -128, -128, -70]  # Clamped at extremes
+
+
+
+-----------------------------------------------------------------------------------------------------------
+(51) vsll.vv vd, vs2, vs1, vm 		# vd[i] = vs2[i] << vs1[i] 		(//////	 DONE 	/////)
+
+logical shift left
+
+# The shift amount (vs1[i]) is treated as an unsigned integer.
+
+# If vs1[i] >= SEW, the result is zero (e.g., shifting a 32-bit value by 32 bits
+# If vs1[i] = 0, vd[i] = vs2[i]
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 100101   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+
+-----------------------------------------------------------------------------------------------------------
+(52) vsrl.vv vd, vs2, vs1		# vd[i] = vs2[i] >> vs1[i]		(//////	 DONE 	/////)
+
+# If vs1[i] >= SEW, the result is zero (e.g., shifting a 32-bit value by 32 bits
+# If vs1[i] = 0, vd[i] = vs2[i]
+
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 101000   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+-----------------------------------------------------------------------------------------------------------
+(53) vsmul.vv vd, vs2, vs1, vm  # vd[i] = clip(roundoff_signed(vs2[i]*vs1[i], SEW-1))	(//////	 DONE 	/////)
+
+# First find the multiplication vs2[i] * vs1[i] and shift right arithmatic by (SEW - 1) --------> divide the result by 2 ^ (SEW -1)
+
+# saturate the result if the result exceeds the signed range 
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 100111   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+-----------------------------------------------------------------------------------------------------------
+(54) vsra.vv vd, vs2, vs1		# vd[i] = vs2[i] >> vs1[i]		(//////	 DONE 	/////)
+
+# Arithmetic shift right
+
+| 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
+| funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
+| 101001   |vm | vs2     | vs1     | 000     | vd     | 1010111 |
+
+
+
+
