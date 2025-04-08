@@ -1241,7 +1241,6 @@ vd = [64 , 4, 8, 32]
 notes:
 a. (1>> -1) is illegal ----> validate if vs1[i] == 0 set vd[i] = vs2[i]
 b. if vs1[i] >= SEW ----> vd[i] = 0
-c. if vd[i] >= max(unsigned) ---> clamp it to MAX_UNSIGNED
 
 | 31    26 |25 |24    20 |19    15 |14    12 |11    7 |6      0 |
 | funct6   |vm | vs2     | vs1     | funct3  | vd     | opcode  |
