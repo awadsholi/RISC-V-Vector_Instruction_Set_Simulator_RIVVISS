@@ -38,7 +38,6 @@ SC_MODULE(Decode_Execution_Stage) {
         funct3 = instruction_div.range(14,12);
         vd = instruction_div.range(11,7).to_uint();
         opcode = instruction_div.range(6,0);
-        int8_t Imm;
 
         switch(opcode.to_uint()){
             case 0b1010111: 
@@ -51,7 +50,7 @@ SC_MODULE(Decode_Execution_Stage) {
                                     vadd_vv(reg_status,vd,vs1,vs2,vm.to_uint());
                                     break;
                             case 0b011:                              // Vector to Immediate(vadd.vi)
-                                    Imm=instruction_div.range(19,15).to_int();
+                                    int8_t Imm=instruction_div.range(19,15).to_int();
                                     vadd_vi(reg_status,vd,vs2,Imm,vm.to_uint());
                                     break;
                         }break;
@@ -68,7 +67,7 @@ SC_MODULE(Decode_Execution_Stage) {
 
                         switch (funct3.to_uint()){ 
                             case 0b011:                              // Vector to Immediate (vrsub.vi)
-                                    Imm=instruction_div.range(19,15).to_int();
+                                    int8_t Imm=instruction_div.range(19,15).to_int();
                                     vrsub_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
                                     break;
                         }break;
@@ -80,7 +79,7 @@ SC_MODULE(Decode_Execution_Stage) {
                                 vand_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
                                 break;
                         case 0b011:                                 // Vector to Immediate (vand.vi)
-                                Imm=instruction_div.range(19,15).to_int();
+                                int8_t Imm=instruction_div.range(19,15).to_int();
                                 vand_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
                                 break;    
                     }break;
@@ -92,7 +91,7 @@ SC_MODULE(Decode_Execution_Stage) {
                                 vor_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
                                 break;
                         case 0b011:                                 // Vector to Immediate (vor.vi)
-                                Imm=instruction_div.range(19,15).to_int();
+                                int8_t Imm=instruction_div.range(19,15).to_int();
                                 vor_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
                                 break;    
                     }break;
@@ -104,7 +103,7 @@ SC_MODULE(Decode_Execution_Stage) {
                                 vxor_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
                                 break;
                         case 0b011:                                // Vector to Immediate(vxor.vi)
-                                Imm=instruction_div.range(19,15).to_int();
+                                int8_t Imm=instruction_div.range(19,15).to_int();
                                 vxor_vi(reg_status,vd,vs2,Imm,vm.to_uint());
                                 break;
                     }break;
@@ -113,13 +112,26 @@ SC_MODULE(Decode_Execution_Stage) {
 
                     switch (funct3.to_uint()){ 
                         case 0b000:                                  // Vector to Vector (vmv.v.v)
-                                vmv_v_v(reg_status,vd,vs1,vm.to_uint()); 
-                                break;
+                        if (vs2 == 0){
+                            vmv_v_v(reg_status,vd,vs1,vm.to_uint()); 
+                            break;
+                        }
+                        else{                                        // Vector to Vector (vmerge.vvm)
+                            vmerge_vvm(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                            break;
+                        }
                         case 0b011:                                  // Vector to Immediate(vmv.v.i)
-                                Imm=instruction_div.range(19,15).to_int();
-                                vmv_v_i(reg_status,vd,Imm,vm.to_uint());
-                                break;
+                        if (vs2 == 0){
+                            int8_t Imm=instruction_div.range(19,15).to_int();
+                            vmv_v_i(reg_status,vd,Imm,vm.to_uint());
+                            break;
+                        }
+                        else{                                       // Vector to Immediate (vmerge.vim)
+                            vmerge_vim(reg_status,vd,instruction_div.range(19,15).to_int(),vs2,vm.to_uint());
+                            break;
+                        }
                     }break;
+
 
                     case 0b000101:                                  //VMIN
 
@@ -195,6 +207,10 @@ SC_MODULE(Decode_Execution_Stage) {
                         case 0b000:                                 // Vector to Vector (vsaddu.vv)
                                 vsaddu_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
                                 break;
+                        case 0b011:                                 // Vector to Immedaite (vsaddu.vi)
+                                uint8_t Imm = instruction_div.range(19,15).to_uint();
+                                vsaddu_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
+                                break;
                     }break;
 
                     case 0b100001:                                  //VSADD
@@ -202,6 +218,10 @@ SC_MODULE(Decode_Execution_Stage) {
                     switch (funct3.to_uint()){ 
                         case 0b000:                                 // Vector to Vector (vsadd.vv)
                                 vsadd_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                        case 0b011:                                 // Vector to Immediate (vsadd.vi)
+                                int8_t Imm = instruction_div.range(19,15).to_int();
+                                vsadd_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
                                 break;
                     }break;
 
@@ -222,6 +242,187 @@ SC_MODULE(Decode_Execution_Stage) {
                                 break;
                     }break;
 
+                    case 0b100101:                                  //VSLL
+
+                    switch (funct3.to_uint()){ 
+                        case 0b000:                                 // Vector to Vector (vsll.vv)
+                                vsll_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                        case 0b011:    
+                                uint8_t Imm = instruction_div.range(19,15).to_uint();    // Vector to Immediate (vsll.vi)
+                                vsll_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
+                                break;
+                    }break;
+
+
+                    case 0b101000:                                  //VSRL
+
+                    switch (funct3.to_uint()){ 
+                        case 0b000:                                 // Vector to Vector (vsrl.vv)
+                                vsrl_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                        case 0b011:                                 // Vector to Immediate (vsrl.vi)
+                                uint8_t Imm = instruction_div.range(19,15).to_uint();  
+                                vsrl_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
+                                break;
+                    }break;
+
+
+                    case 0b100111:                                  //VSMUL
+
+                    switch (funct3.to_uint()){ 
+                        case 0b000:                                 // Vector to Vector (vsmul.vv)
+                                vsmul_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                    }break;
+                    
+
+                    case 0b101001:                                  //VSRA
+
+                    switch (funct3.to_uint()){ 
+                        case 0b000:                                 // Vector to Vector (vsra.vv)
+                                vsra_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
+                                break;
+                        case 0b011:                                 // Vector to Immediate (vsra.vi)
+                                uint8_t Imm = instruction_div.range(19,15).to_uint();  
+                                vsra_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
+                                break;
+                    }break;
+
+                    case 0b010000:                                  //vadc.vvm
+
+                    switch (funct3.to_uint()){
+                        case 0b000:                                 // Vector to Vector (vadc.vvm ) with  carry-in
+                                vadc_vvm(reg_status,vd,vs1,vs2,vm.to_uint());
+                                break;
+                        case 0b011:                                 // Vector to sign_extended imm (vadc.vvm ) with  carry-in
+                                vadc_vim(reg_status,vd,instruction_div.range(19,15).to_int(),vs2,vm.to_uint());
+                                break;    
+                    }break;
+
+                    case 0b010001:                                  //vmadc.vvm
+
+                    switch (funct3.to_uint()){
+                        case 0b000:                                 // Vector to Vector (vmadc.vvm ) with  carry-in
+                                vmadc_vvm(reg_status,vd,vs1,vs2,vm.to_uint());
+                                break;
+                        case 0b011:                                 // Vector to sign_extended imm (vmadc.vim ) with  carry-in / (vmadc.vi) wuithout carry-in
+                                vmadc_vi(reg_status,vd,instruction_div.range(19,15).to_int(),vs2,vm.to_uint());
+                                break;
+                    }break;
+
+                    case 0b010010:                                  //vsbc.vvm
+
+                    switch (funct3.to_uint()){
+                        case 0b000:                                 // Vector to Vector (vsbc.vvm ) with  carry-in
+                                vsbc_vvm(reg_status,vd,vs1,vs2,vm.to_uint());
+                                break;
+                    }break;
+
+                    case 0b010011:                                  //vmsbc.vv and vmsbc.vvm
+
+                    switch (funct3.to_uint()){
+                        case 0b000:                                 // Vector to Vector (vmsbc.vv and .vvm ) with/without  carry-in
+                                vmsbc_vv(reg_status,vd,vs1,vs2,vm.to_uint());
+                                break;
+                    }break;
+
+                    case 0b011001:                                  //vmsne.vv
+
+                    switch (funct3.to_uint()){
+                        case 0b000:                                 // Vector to Vector (vmsne.vv)
+                                vmsne_vv(reg_status,vd,vs1,vs2,vm.to_uint());
+                                break;
+                        case 0b011:                                 // Vector to Immediate (vmsne.vi)
+                                vmsne_vi(reg_status,vd,instruction_div.range(19,15).to_int(),vs2,vm.to_uint());
+                                break;
+                    }break;
+
+                    case 0b011000:                                  //vmseq.vi
+
+                    switch (funct3.to_uint()){
+                        case 0b011:                                 // Vector to Vector (vmsne.vv)
+                                vmseq_vi(reg_status,vd,instruction_div.range(19,15).to_int(),vs2,vm.to_uint());
+                                break;
+                    }break;
+
+                    case 0b011010:                                  //vmsltu.vv
+
+                    switch (funct3.to_uint()){
+                        case 0b000:                                 // Vector to Vector (vmsltu.vv)
+                                vmsltu_vv(reg_status,vd,vs1,vs2,vm.to_uint());
+                                break;
+                    }break;
+
+                    case 0b011011:                                  //vmslt.vv
+
+                    switch (funct3.to_uint()){
+                        case 0b000:                                 // Vector to Vector (vmslt.vv)
+                                vmslt_vv(reg_status,vd,vs1,vs2,vm.to_uint());
+                                break;
+                    }break;
+
+                    case 0b011100:                                  //vmslteu.vv
+
+                    switch (funct3.to_uint()){
+                        case 0b000:                                 // Vector to Vector (vmsleu.vv)
+                                vmsleu_vv(reg_status,vd,vs1,vs2,vm.to_uint());
+                                break;
+                        case 0b011:                                 // Vector to Immediate (vmsleu.vi)
+                                vmsleu_vi(reg_status,vd,instruction_div.range(19,15).to_int(),vs2,vm.to_uint());
+                                break;
+                    }break;
+
+                    case 0b011101:                                  //vmsle.vv
+
+                    switch (funct3.to_uint()){
+                        case 0b000:                                 // Vector to Vector (vmsle.vv)
+                                vmsle_vv(reg_status,vd,vs1,vs2,vm.to_uint());
+                                break;
+                        case 0b011:                                 // Vector to Immediate (vmsle.vi)
+                                vmsle_vi(reg_status,vd,instruction_div.range(19,15).to_int(),vs2,vm.to_uint());
+                                break;
+                    }break;
+
+                    case 0b011110:                                  //vmsgtu.vi
+
+                    switch (funct3.to_uint()){
+                        case 0b011:                                 // Vector to Immediate (vmsgtu.vi)
+                                vmsgtu_vi(reg_status,vd,instruction_div.range(19,15).to_int(),vs2,vm.to_uint());
+                                break;
+                    }break;
+
+                    case 0b011111:                                  //vmsgt.vi
+
+                    switch (funct3.to_uint()){
+                        case 0b011:                                 // Vector to Immediate (vmsgt.vi)
+                                vmsgt_vi(reg_status,vd,instruction_div.range(19,15).to_int(),vs2,vm.to_uint());
+                                break;
+                    }break;
+
+                    case 0b101010:                                  //vssrl
+
+                    switch (funct3.to_uint()){
+                        case 0b000:                                 // Vector to Vector (vssrl.vv)
+                                vssrl_vv(reg_status,vd,vs2,vs1,vm.to_uint());
+                                break;
+                        case 0b011:                                 // Vector to Immediate (vssrl.vi)
+                                uint8_t Imm = instruction_div.range(19,15).to_uint(); 
+                                vssrl_vi(reg_status,vd,vs2,Imm,vm.to_uint());
+                                break;
+                    }break;
+
+                    case 0b101011:                                  //vssra
+
+                    switch (funct3.to_uint()){
+                        case 0b000:                                 // Vector to Vector (vssra.vv)
+                                vssra_vv(reg_status,vd,vs2,vs1,vm.to_uint());
+                                break;
+                        case 0b011:                                 // Vector to Immediate (vssra.vi)
+                                uint8_t Imm = instruction_div.range(19,15).to_uint(); 
+                                vssra_vi(reg_status,vd,vs2,Imm,vm.to_uint());
+                                break;
+                    }break;
                     
                 }
             break;

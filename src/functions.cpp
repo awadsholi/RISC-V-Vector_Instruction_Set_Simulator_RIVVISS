@@ -32,6 +32,8 @@ void printRegisterStatus(Register_Status *reg_status) {
     printf("Register_Status Information:\n");
     printf("VL    : %d\n", reg_status->VL);
     printf("VLMAX : %d\n", reg_status->VLMAX);
+    printf("vlenb : %d\n", reg_status->vlenb);
+    printf("vcsr  : 0x%08x\n", reg_status->vcsr.to_uint());
 
     printf("\nVtype Information:\n");
     printf("SEW   : %d\n", reg_status->vtype.SEW);
@@ -48,10 +50,10 @@ void printRegisterStatus(Register_Status *reg_status) {
 
                 int64_t val = reg_status->Vector_Register[i].range(j + reg_status->vtype.SEW - 1, j).to_int64();  // sign-extended to 64 bits internally
                 switch (reg_status->vtype.SEW) {
-                    case 8:  printf("%d, ",  static_cast<int8_t>(val));  break;     //signed 8 bit 
-                    // case 8:  printf("%u, ",  static_cast<uint8_t>(val));  break;       //unsigned 8 bit 
-                    case 16: printf("%d, ",  static_cast<int16_t>(val)); break;        //signed 16 bit
-                    // case 16: printf("%u, ",  static_cast<uint16_t>(val)); break;       //unsigned 16 bit 
+                    // case 8:  printf("%d, ",  static_cast<int8_t>(val));  break;     //signed 8 bit 
+                    case 8:  printf("%u, ",  static_cast<uint8_t>(val));  break;       //unsigned 8 bit 
+                    // case 16: printf("%d, ",  static_cast<int16_t>(val)); break;        //signed 16 bit
+                    case 16: printf("%u, ",  static_cast<uint16_t>(val)); break;       //unsigned 16 bit 
                     case 32: printf("%d, ",  static_cast<int32_t>(val)); break;        //signed 32 bit 
                     // case 32: printf("%u, ",  static_cast<uint32_t>(val)); break;       //unsigned 32 bit 
                     case 64: printf("%lld, ", static_cast<long long>(val)); break;      //signed 64 bit
@@ -63,11 +65,57 @@ void printRegisterStatus(Register_Status *reg_status) {
     }    
 }
 
-void free_resourses(Register_Status *reg_status){                         //Realese resourses 
+void free_resourses(Register_Status *&reg_status){                         //Realese resourses 
 
-    free(reg_status);
-    delete [] memory;
+    delete reg_status;      // Free the Register_Status object
+    reg_status = nullptr;
 
+    delete [] memory;        // Free the instruction memory array
+    memory = nullptr; 
+}
+
+
+sc_bv<128> RoundOff(sc_bv<128> V,uint64_t Shift_amount , uint8_t Rounding_Mode , uint8_t Signed_flag){
+    if(Shift_amount==0)
+        {return V;}
+    sc_bv<128> Result;
+    uint8_t r ;                                                                     //Rounding increment
+    switch (Rounding_Mode){
+        case 0:  {                                       // RNU Mode
+            r = V[Shift_amount - 1].to_bool();                                      //convert bit to 0 or 1
+            break;
+        }
+        case 1: {                                       // RNE Mode
+            bool guard_bit =  V[Shift_amount - 1].to_bool();
+            bool New_LSB   =  V[Shift_amount].to_bool();                            //New LSB after truncated 
+            bool Sticky_bit =0;
+            if(Shift_amount>1)
+                Sticky_bit = V.range(Shift_amount-2,0).or_reduce();                 //Check if the slice != 0 
+            r = guard_bit & (Sticky_bit | New_LSB);                                 //Calculate the Rounding increment (r)
+            break;
+        }
+        case 2:{                                        // RDN Mode
+            r = 0;
+            break;
+        }
+        case 3:{                                        // ROD Mode
+            bool Sticky_bit = V.range(Shift_amount-1,0).or_reduce();                //v[d-1:0]!=0 
+            bool New_LSB   =  V[Shift_amount].to_bool();                            // !v[d] 
+            r = (!New_LSB) & Sticky_bit;
+            break;
+        }
+    }
+
+    if(Signed_flag==1) {
+        sc_bigint<128> temp =(sc_bigint<128>(V) >> Shift_amount) + r;               //Arithmetic shift right and add rounding r
+        Result=sc_bv<128>(temp);
+    }
+    else{
+        sc_biguint<128> temp=(sc_biguint<128>(V) >> Shift_amount) + r;              //Logical shift right and add rounding r
+        Result=sc_bv<128>(temp);
+    }
+
+    return Result;
 }
 
 
@@ -181,8 +229,15 @@ void ReadConfigurationFileParameters(){
             break;
     }
 
-    reg_status->VLMAX = (VLEN/reg_status->vtype.SEW) * reg_status->vtype.LMUL;  //calculating VLMAX(number of elements)
-
+    reg_status->VLMAX = (VLEN/reg_status->vtype.SEW) * reg_status->vtype.LMUL;                     //calculating VLMAX(number of elements)
     reg_status->VL = (reg_status->AVL > reg_status->VLMAX) ? reg_status->VLMAX: reg_status->AVL;
+    reg_status->vlenb = (VLEN/8);
+    reg_status->vcsr = sc_bv<32>("00000000000000000000000000000000");
+
+    const std::string vlen_zero(VLEN, '0'); 
+    for (int i = 0; i < NUMBER_OF_REGISTERS; i++) {
+        reg_status->Scalar_Registers[i] = sc_bv<32>("00000000000000000000000000000000");
+        reg_status->Vector_Register[i] =  sc_bv<VLEN>(vlen_zero.c_str()); 
+    }
 
 }
