@@ -43,69 +43,96 @@ SC_MODULE(Decode_Execution_Stage) {
             case 0b1010111: 
                 switch (funct6.to_uint()){
                  
-                    case 0b000000:                                  // Vadd
+                    case 0b000000:                                  // Vadd or vredsums
 
                         switch (funct3.to_uint()){     
-                            case 0b000:                              // Vector to Vector (vadd.vv)
+                            case 0b000:{                              // Vector to Vector (vadd.vv)
                                     vadd_vv(reg_status,vd,vs1,vs2,vm.to_uint());
-                                    break;
-                            case 0b011:                              // Vector to Immediate(vadd.vi)
+                                    break;}
+                            case 0b011:{                              // Vector to Immediate(vadd.vi)
                                     int8_t Imm=instruction_div.range(19,15).to_int();
                                     vadd_vi(reg_status,vd,vs2,Imm,vm.to_uint());
-                                    break;
+                                    break;}
+                            case 0b010:{                              // Vector to Vector(vredsum_vs)
+                                    vredsum_vs(reg_status,vd,vs2,vs1,vm.to_uint());
+                                    break;}
+                        }break;
+
+                    case 0b000001:                                    // vredand
+
+                        switch (funct3.to_uint()){ 
+                            case 0b010:{                              // Vector to Vector (vredand.vs)
+                                    vredand_vs(reg_status,vd,vs2,vs1,vm.to_uint());  
+                                    break;}
                         }break;
                     
+                        
                     case 0b000010:                                  //Vsub
 
                         switch (funct3.to_uint()){ 
-                            case 0b000:                              // Vector to Vector 
+                            case 0b000:{                              // Vector to Vector 
                                     vsub_vv(reg_status,vd,vs1,vs2,vm.to_uint());  
-                                    break;
+                                    break;}
+                            case 0b010:{                              // Vector to Vector (vredor.vs)
+                                    vredor_vs(reg_status,vd,vs2,vs1,vm.to_uint());  
+                                    break;}
                         }break;
 
-                    case 0b000011:                                  //Vrsub
+                    case 0b000011:                                  //Vrsub or Vredxor
 
                         switch (funct3.to_uint()){ 
-                            case 0b011:                              // Vector to Immediate (vrsub.vi)
+                            case 0b011:{                              // Vector to Immediate (vrsub.vi)
                                     int8_t Imm=instruction_div.range(19,15).to_int();
                                     vrsub_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
-                                    break;
+                                    break;}
+                            case 0b010:{                              // Vector to Vector (vredxor.vs)
+                                    vredxor_vs(reg_status,vd,vs2,vs1,vm.to_uint()); 
+                                    break;}
                         }break;
 
-                    case 0b001001:                                  //Vand
+                    case 0b001001:                                  //Vand or vaadd
 
                     switch (funct3.to_uint()){ 
-                        case 0b000:                                 // Vector to Vector (vand.vv)
+                        case 0b000:{                                 // Vector to Vector (vand.vv)
                                 vand_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
-                                break;
-                        case 0b011:                                 // Vector to Immediate (vand.vi)
+                                break;}
+                        case 0b011:{                                 // Vector to Immediate (vand.vi)
                                 int8_t Imm=instruction_div.range(19,15).to_int();
                                 vand_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
-                                break;    
+                                break;}    
+                        case 0b010:{                                 // Vector to Vector (vaadd.vv)
+                                vaadd_vv(reg_status,vd,vs2,vs1,vm.to_uint()); 
+                                break;}  
                     }break;
 
-                    case 0b001010:                                  //Vor
+                    case 0b001010:                                  //Vor or Vasubu
 
                     switch (funct3.to_uint()){ 
-                        case 0b000:                                 // Vector to Vector (vor.vv)
+                        case 0b000:{                                 // Vector to Vector (vor.vv)
                                 vor_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
-                                break;
-                        case 0b011:                                 // Vector to Immediate (vor.vi)
+                                break;}
+                        case 0b011:{                                 // Vector to Immediate (vor.vi)
                                 int8_t Imm=instruction_div.range(19,15).to_int();
                                 vor_vi(reg_status,vd,vs2,Imm,vm.to_uint()); 
-                                break;    
+                                break;} 
+                        case 0b010:{                                 // Vector to Vector (vasubu.vv)
+                                vasubu_vv(reg_status,vd,vs2,vs1,vm.to_uint()); 
+                                break;}    
                     }break;
 
-                    case 0b001011:                                   //Vxor
+                    case 0b001011:                                   //Vxor or Vasub
 
                     switch (funct3.to_uint()){ 
-                        case 0b000:                                 // Vector to Vector (vxor.vv)
+                        case 0b000:{                                 // Vector to Vector (vxor.vv)
                                 vxor_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
-                                break;
-                        case 0b011:                                // Vector to Immediate(vxor.vi)
+                                break;}
+                        case 0b011:{                                // Vector to Immediate(vxor.vi)
                                 int8_t Imm=instruction_div.range(19,15).to_int();
                                 vxor_vi(reg_status,vd,vs2,Imm,vm.to_uint());
-                                break;
+                                break;}
+                        case 0b010:{                                // Vector to Vector(vasub.vv)
+                                vasub_vv(reg_status,vd,vs2,vs1,vm.to_uint());
+                                break;}
                     }break;
 
                     case 0b010111:                                    //VMV
@@ -132,37 +159,57 @@ SC_MODULE(Decode_Execution_Stage) {
                         }
                     }break;
 
-
-                    case 0b000101:                                  //VMIN
+                    case 0b001000:                                   //Vaaddu
 
                     switch (funct3.to_uint()){ 
-                        case 0b000:                                 // Vector to Vector (vmin.vv)
+                        case 0b010:{                                // Vector to Vector(vaaddu.vv)
+                                vaaddu_vv(reg_status,vd,vs2,vs1,vm.to_uint());
+                                break;}
+                    }break;
+
+                    case 0b000101:                                  //vmin or vredmin
+
+                    switch (funct3.to_uint()){ 
+                        case 0b000:{                                 // Vector to Vector (vmin.vv)
                                 vmin_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
-                                break;
+                                break;}
+                        case 0b010:{                                 // Vector to Vector (vredmin.vs)
+                                vredmin_vs(reg_status,vd,vs2,vs1,vm.to_uint()); 
+                                break;}
                     }break;
 
-                    case 0b000111:                                  //VMAX
+                    case 0b000111:                                  //vmax or vredmax
 
                     switch (funct3.to_uint()){ 
-                        case 0b000:                                 // Vector to Vector (vmax.vv)
+                        case 0b000:{                                 // Vector to Vector (vmax.vv)
                                 vmax_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
-                                break;
+                                break;}
+                        case 0b010:{                                 // Vector to Vector (vredmax.vs)
+                                vredmax_vs(reg_status,vd,vs2,vs1,vm.to_uint()); 
+                                break;}
                     }break;
 
-                    case 0b000100:                                  //VMINU
+                    case 0b000100:                                  //vminu or vredminu
 
                     switch (funct3.to_uint()){ 
-                        case 0b000:                                 // Vector to Vector (vminu.vv)
+                        case 0b000:{                                 // Vector to Vector (vminu.vv)
                                 vminu_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
-                                break;
+                                break;}
+                        case 0b010:{                                 // Vector to Vector (vredminu.vs)
+                                vredminu_vs(reg_status,vd,vs2,vs1,vm.to_uint()); 
+                                break;}
+
                     }break;
 
-                    case 0b000110:                                  //VMAXU
+                    case 0b000110:                                  //vmaxu or vredmaxu
 
                     switch (funct3.to_uint()){ 
-                        case 0b000:                                 // Vector to Vector (vmaxu.vv)
+                        case 0b000:{                                 // Vector to Vector (vmaxu.vv)
                                 vmaxu_vv(reg_status,vd,vs1,vs2,vm.to_uint()); 
-                                break;
+                                break;}
+                        case 0b010:{                                 // Vector to Vector (vredmaxu.vs)
+                                vredmaxu_vs(reg_status,vd,vs2,vs1,vm.to_uint()); 
+                                break;}
                     }break;
 
                     case 0b001100:                                  //VRGATHER
@@ -399,7 +446,7 @@ SC_MODULE(Decode_Execution_Stage) {
                                 vmsgt_vi(reg_status,vd,instruction_div.range(19,15).to_int(),vs2,vm.to_uint());
                                 break;
                     }break;
-
+                    
                     case 0b101010:                                  //vssrl
 
                     switch (funct3.to_uint()){
@@ -424,8 +471,29 @@ SC_MODULE(Decode_Execution_Stage) {
                                 break;
                     }break;
                     
+                    
                 }
             break;
+
+        case  0b1110011:{                                                                  //All CSR/system ops.
+                sc_bv<12> CSR= instruction_div.range(31,20);
+                switch (CSR.to_uint64()){
+                        
+                        case 0b000000001010:                                              // vxrm
+                                switch (funct3.to_uint()){
+                                        case 0b101:                                       // CSRRWI.
+                                                if(vd==0){
+                                                        sc_bv<5> Imm_bits = instruction_div.range(19,15);
+                                                        csrwi_vxrm(reg_status,Imm_bits);      //Imm_bits represents the rounding mode (0...3) 
+                                                } else{}                      
+                                                break;
+                                }break;  
+                                
+                        }
+
+        }
+        break;
+
         }
     
     }

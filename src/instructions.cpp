@@ -1,5 +1,6 @@
 #include "instructions.h"
 #include "functions.h"
+#include "modules/datamemory.h"
 
 
 /////////*                                       INSTRUCTION FUNCTIONS                                      *////////
@@ -698,7 +699,209 @@ void vssra_vi(Register_Status *register_status, uint8_t vd, uint8_t vs2, uint8_t
     }
 }
 
-            /*          MASKING INSTRUCTIONS            */
+                               //****         Reduction and Averaging Instructions (OPMVV)       ****//
+
+
+void vredsum_vs(Register_Status * register_status, uint8_t vd, uint8_t vs2, uint8_t vs1,uint8_t vm) {     // vredsum_vs
+    printf("\nvredsum.vs v%d[0] = sum (v%d[0] , v%d[*])\n",vd,vs1,vs2);
+    sc_bv<VLEN> V0 =register_status->Vector_Register[0];
+    int64_t vs2_val;
+    int64_t Accumulator = register_status->Vector_Register[vs1].range(register_status->vtype.SEW-1 , 0).to_int64();     //get the vs1[0]
+
+    for (uint64_t i = 0,j = 0; i < register_status->VL; i++, j+=register_status->vtype.SEW) {
+        if (vm == 1 || V0.range(j+register_status->vtype.SEW-1 , j).to_uint()==1){               //Checking Masking (Active elements)
+            vs2_val = register_status->Vector_Register[vs2].range(j+register_status->vtype.SEW-1 , j).to_int64();
+            Accumulator+=vs2_val;
+        }
+    }
+    register_status->Vector_Register[vd].range(register_status->vtype.SEW-1 , 0) = Accumulator;
+}
+
+
+void vredand_vs(Register_Status * register_status, uint8_t vd, uint8_t vs2, uint8_t vs1,uint8_t vm) {     // vredand_vs
+    printf("\nvredand.vs v%d[0] = and (v%d[0] , v%d[*])\n",vd,vs1,vs2);
+    sc_bv<VLEN> V0 =register_status->Vector_Register[0];
+    sc_bv<64> Accumulator = register_status->Vector_Register[vs1].range(register_status->vtype.SEW-1 , 0);     //get the vs1[0]
+
+    for (uint64_t i = 0,j = 0; i < register_status->VL; i++, j+=register_status->vtype.SEW) {
+        if (vm == 1 || V0.range(j+register_status->vtype.SEW-1 , j).to_uint()==1){               //Checking Masking (Active elements)
+            Accumulator &= register_status->Vector_Register[vs2].range(j+register_status->vtype.SEW-1 , j);
+        }
+    }
+    register_status->Vector_Register[vd].range(register_status->vtype.SEW-1 , 0) = Accumulator.range(register_status->vtype.SEW-1 , 0);
+}
+
+
+void vredor_vs(Register_Status * register_status, uint8_t vd, uint8_t vs2, uint8_t vs1,uint8_t vm) {     // vredor_vs
+    printf("\nvredor_vs v%d[0] = or (v%d[0] , v%d[*])\n",vd,vs1,vs2);
+    sc_bv<VLEN> V0 =register_status->Vector_Register[0];
+    sc_bv<64> Accumulator = register_status->Vector_Register[vs1].range(register_status->vtype.SEW-1 , 0);     //get the vs1[0]
+
+    for (uint64_t i = 0,j = 0; i < register_status->VL; i++, j+=register_status->vtype.SEW) {
+        if (vm == 1 || V0.range(j+register_status->vtype.SEW-1 , j).to_uint()==1){               //Checking Masking (Active elements)
+            Accumulator |= register_status->Vector_Register[vs2].range(j+register_status->vtype.SEW-1 , j);
+        }
+    }
+    register_status->Vector_Register[vd].range(register_status->vtype.SEW-1 , 0) = Accumulator.range(register_status->vtype.SEW-1 , 0);
+}
+
+
+void vredxor_vs(Register_Status * register_status, uint8_t vd, uint8_t vs2, uint8_t vs1,uint8_t vm) {     // vredxor_vs
+    printf("\nvredxor_vs v%d[0] = xor (v%d[0] , v%d[*])\n",vd,vs1,vs2);
+    sc_bv<VLEN> V0 =register_status->Vector_Register[0];
+    sc_bv<64> Accumulator = register_status->Vector_Register[vs1].range(register_status->vtype.SEW-1 , 0);     //get the vs1[0]
+
+    for (uint64_t i = 0,j = 0; i < register_status->VL; i++, j+=register_status->vtype.SEW) {
+        if (vm == 1 || V0.range(j+register_status->vtype.SEW-1 , j).to_uint()==1){               //Checking Masking (Active elements)
+            Accumulator ^= register_status->Vector_Register[vs2].range(j+register_status->vtype.SEW-1 , j);
+        }
+    }
+    register_status->Vector_Register[vd].range(register_status->vtype.SEW-1 , 0) = Accumulator.range(register_status->vtype.SEW-1 , 0);
+}
+
+
+void vredmaxu_vs(Register_Status * register_status, uint8_t vd, uint8_t vs2, uint8_t vs1,uint8_t vm) {     //vredmaxu_vs
+    printf("\nvredmaxu.vs v%d[0] = max unsigned(v%d[0],v%d[*])\n",vd,vs1,vs2);
+    sc_bv<VLEN> V0 =register_status->Vector_Register[0];
+    uint64_t vs2_val;
+    uint64_t Accumulator = register_status->Vector_Register[vs1].range(register_status->vtype.SEW-1 , 0).to_uint64();     //get the vs1[0]
+
+    for (uint64_t i = 0,j = 0; i < register_status->VL; i++, j+=register_status->vtype.SEW) {
+        if (vm == 1 || V0.range(j+register_status->vtype.SEW-1 , j).to_uint()==1){               //Checking Masking (Active elements)
+            vs2_val = register_status->Vector_Register[vs2].range(j+register_status->vtype.SEW-1 , j).to_uint64();
+            if(vs2_val > Accumulator)
+                Accumulator = vs2_val;
+        }
+    }
+    register_status->Vector_Register[vd].range(register_status->vtype.SEW-1 , 0) = Accumulator;
+}
+
+
+void vredminu_vs(Register_Status * register_status, uint8_t vd, uint8_t vs2, uint8_t vs1,uint8_t vm) {     //vredminu_vs
+    printf("\nvredminu.vs v%d[0] = min unsigned(v%d[0],v%d[*])\n",vd,vs1,vs2);
+    sc_bv<VLEN> V0 =register_status->Vector_Register[0];
+    uint64_t vs2_val;
+    uint64_t Accumulator = register_status->Vector_Register[vs1].range(register_status->vtype.SEW-1 , 0).to_uint64();     //get the vs1[0]
+
+    for (uint64_t i = 0,j = 0; i < register_status->VL; i++, j+=register_status->vtype.SEW) {
+        if (vm == 1 || V0.range(j+register_status->vtype.SEW-1 , j).to_uint()==1){               //Checking Masking (Active elements)
+            vs2_val = register_status->Vector_Register[vs2].range(j+register_status->vtype.SEW-1 , j).to_uint64();
+            if(vs2_val < Accumulator)
+                Accumulator = vs2_val;
+        }
+    }
+    register_status->Vector_Register[vd].range(register_status->vtype.SEW-1 , 0) = Accumulator;
+}
+
+
+void vredmax_vs(Register_Status * register_status, uint8_t vd, uint8_t vs2, uint8_t vs1,uint8_t vm) {     //vredmax_vs
+    printf("\nvredmax.vs v%d[0] = max (v%d[0],v%d[*])\n",vd,vs1,vs2);
+    sc_bv<VLEN> V0 =register_status->Vector_Register[0];
+    int64_t vs2_val;
+    int64_t Accumulator = register_status->Vector_Register[vs1].range(register_status->vtype.SEW-1 , 0).to_int64();     //get the vs1[0]
+
+    for (uint64_t i = 0,j = 0; i < register_status->VL; i++, j+=register_status->vtype.SEW) {
+        if (vm == 1 || V0.range(j+register_status->vtype.SEW-1 , j).to_uint()==1){               //Checking Masking (Active elements)
+            vs2_val = register_status->Vector_Register[vs2].range(j+register_status->vtype.SEW-1 , j).to_int64();
+            if(vs2_val > Accumulator)
+                Accumulator = vs2_val;
+        }
+    }
+    register_status->Vector_Register[vd].range(register_status->vtype.SEW-1 , 0) = Accumulator;
+}
+
+
+
+void vredmin_vs(Register_Status * register_status, uint8_t vd, uint8_t vs2, uint8_t vs1,uint8_t vm) {     //vredmin_vs
+    printf("\nvredmin.vs v%d[0] = min (v%d[0],v%d[*])\n",vd,vs1,vs2);
+    sc_bv<VLEN> V0 =register_status->Vector_Register[0];
+    int64_t vs2_val;
+    int64_t Accumulator = register_status->Vector_Register[vs1].range(register_status->vtype.SEW-1 , 0).to_int64();     //get the vs1[0]
+
+    for (uint64_t i = 0,j = 0; i < register_status->VL; i++, j+=register_status->vtype.SEW) {
+        if (vm == 1 || V0.range(j+register_status->vtype.SEW-1 , j).to_uint()==1){               //Checking Masking (Active elements)
+            vs2_val = register_status->Vector_Register[vs2].range(j+register_status->vtype.SEW-1 , j).to_int64();
+            if(vs2_val < Accumulator)
+                Accumulator = vs2_val;
+        }
+    }
+    register_status->Vector_Register[vd].range(register_status->vtype.SEW-1 , 0) = Accumulator;
+}
+
+
+void vaadd_vv(Register_Status * register_status, uint8_t vd, uint8_t vs2, uint8_t vs1,uint8_t vm) {     //VAADD_VV
+    printf("\nVaadd.vv v%d[i] = roundoff_signed(v%d[i] + v%d[i] , 1)\n",vd,vs1,vs2);
+    sc_bv<VLEN> V0 =register_status->Vector_Register[0];
+    sc_bigint<128> temp;
+    int64_t vs2_val,vs1_val;
+    uint8_t Rounding_Mode = register_status->vcsr.range(2,1).to_uint();
+
+    for (uint64_t i = 0,j = 0; i < register_status->VL; i++, j+=register_status->vtype.SEW) {
+        if (vm == 1 || V0.range(j+register_status->vtype.SEW-1 , j).to_uint()==1){               //Checking Masking (Active elements)
+            vs2_val = register_status->Vector_Register[vs2].range(j+register_status->vtype.SEW-1 , j).to_int64();
+            vs1_val = register_status->Vector_Register[vs1].range(j+register_status->vtype.SEW-1 , j).to_int64();
+            temp =  sc_bigint<128> (vs1_val) + sc_bigint<128> (vs2_val) ;
+            register_status->Vector_Register[vd].range(j+register_status->vtype.SEW-1 , j) = RoundOff(temp,1,Rounding_Mode,1).range(register_status->vtype.SEW-1,0);  //Apply round off function (signed) 
+        }
+    }
+}
+
+
+void vaaddu_vv(Register_Status * register_status, uint8_t vd, uint8_t vs2, uint8_t vs1,uint8_t vm) {     //VAADDU_VV
+    printf("\nVaaddu.vv v%d[i] = roundoff_unsigned(v%d[i] + v%d[i] , 1)\n",vd,vs1,vs2);
+    sc_bv<VLEN> V0 =register_status->Vector_Register[0];
+    sc_biguint<128> temp;
+    uint64_t vs2_val,vs1_val;
+    uint8_t Rounding_Mode = register_status->vcsr.range(2,1).to_uint();
+
+    for (uint64_t i = 0,j = 0; i < register_status->VL; i++, j+=register_status->vtype.SEW) {
+        if (vm == 1 || V0.range(j+register_status->vtype.SEW-1 , j).to_uint()==1){               //Checking Masking (Active elements)
+            vs2_val = register_status->Vector_Register[vs2].range(j+register_status->vtype.SEW-1 , j).to_uint64();
+            vs1_val = register_status->Vector_Register[vs1].range(j+register_status->vtype.SEW-1 , j).to_uint64();
+            temp =  sc_biguint<128> (vs2_val) + sc_biguint<128> (vs1_val) ;
+            register_status->Vector_Register[vd].range(j+register_status->vtype.SEW-1 , j) = RoundOff(temp,1,Rounding_Mode,0).range(register_status->vtype.SEW-1,0);  //Apply round off function (unsigned) 
+        }
+    }
+}
+
+
+void vasub_vv(Register_Status * register_status, uint8_t vd, uint8_t vs2, uint8_t vs1,uint8_t vm) {     //VASUB_VV
+    printf("\nvasub.vv v%d[i] = roundoff_signed(v%d[i] - v%d[i] , 1)\n",vd,vs2,vs1);
+    sc_bv<VLEN> V0 =register_status->Vector_Register[0];
+    sc_bigint<128> temp;
+    int64_t vs2_val,vs1_val;
+    uint8_t Rounding_Mode = register_status->vcsr.range(2,1).to_uint();
+
+    for (uint64_t i = 0,j = 0; i < register_status->VL; i++, j+=register_status->vtype.SEW) {
+        if (vm == 1 || V0.range(j+register_status->vtype.SEW-1 , j).to_uint()==1){               //Checking Masking (Active elements)
+            vs2_val = register_status->Vector_Register[vs2].range(j+register_status->vtype.SEW-1 , j).to_int64();
+            vs1_val = register_status->Vector_Register[vs1].range(j+register_status->vtype.SEW-1 , j).to_int64();
+            temp =  sc_bigint<128> (vs2_val) - sc_bigint<128> (vs1_val) ;
+            register_status->Vector_Register[vd].range(j+register_status->vtype.SEW-1 , j) = RoundOff(temp,1,Rounding_Mode,1).range(register_status->vtype.SEW-1,0);  //Apply round off function (signed) 
+        }
+    }
+}
+
+
+void vasubu_vv(Register_Status * register_status, uint8_t vd, uint8_t vs2, uint8_t vs1,uint8_t vm) {     //VASUBU_VV
+    printf("\nvasubu.vv v%d[i] = roundoff_unsigned(v%d[i] - v%d[i] , 1)\n",vd,vs2,vs1);
+    sc_bv<VLEN> V0 =register_status->Vector_Register[0];
+    sc_biguint<128> temp;
+    uint64_t vs2_val,vs1_val;
+    uint8_t Rounding_Mode = register_status->vcsr.range(2,1).to_uint();
+
+    for (uint64_t i = 0,j = 0; i < register_status->VL; i++, j+=register_status->vtype.SEW) {
+        if (vm == 1 || V0.range(j+register_status->vtype.SEW-1 , j).to_uint()==1){               //Checking Masking (Active elements)
+            vs2_val = register_status->Vector_Register[vs2].range(j+register_status->vtype.SEW-1 , j).to_uint64();
+            vs1_val = register_status->Vector_Register[vs1].range(j+register_status->vtype.SEW-1 , j).to_uint64();
+            temp =  sc_biguint<128> (vs2_val) - sc_biguint<128> (vs1_val) ;
+            register_status->Vector_Register[vd].range(j+register_status->vtype.SEW-1 , j) = RoundOff(temp,1,Rounding_Mode,0).range(register_status->vtype.SEW-1,0);  //Apply round off function (unsigned) 
+        }
+    }
+}
+
+
+                                    //****         Masking Instructions        ****//
 
 void vadc_vvm(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2, uint8_t vm) {  
     // vadc.vvm : mask register v0 is used for carry-in
@@ -718,17 +921,16 @@ void vadc_vvm(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2,
         // Calculate max value based on SEW
         uint64_t max_value = (SEW == 64) ? UINT64_MAX : (1ULL << SEW) - 1ULL;       
 
-// Check if overflow occurs
-if ((vs2_val > max_value - vs1_val - carry_in)) {
-    // Handle overflow: wrap the result within the range
-    uint64_t sum = (vs2_val + vs1_val + carry_in) % max_value-1;  // Wrap around
-    reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = sum;
-} else {
-    // No overflow: directly store the sum
-    reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = vs2_val + vs1_val + carry_in;
-}
+        // Check if overflow occurs
+        if ((vs2_val > max_value - vs1_val - carry_in)) {
+            // Handle overflow: wrap the result within the range
+            uint64_t sum = (vs2_val + vs1_val + carry_in) % max_value-1;  // Wrap around
+            reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = sum;
+        } else {
+            // No overflow: directly store the sum
+            reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = vs2_val + vs1_val + carry_in;
+        }
     }
-    printf("\n\n_______________________\n\n");
 }
 
 
@@ -753,17 +955,16 @@ void vadc_vim(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2,
         // Calculate max value based on SEW
         uint64_t max_value = (SEW == 64) ? UINT64_MAX : (1ULL << SEW) - 1ULL;
 
-// Check if overflow occurs
-if ((vs2_val > max_value - signed_imm - carry_in)) {
-    // Handle overflow: wrap the result within the range
-    uint64_t sum = (vs2_val + signed_imm + carry_in) % max_value;  // Wrap around
-    reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = sum;
-} else {
-    // No overflow: directly store the sum
-    reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = vs2_val + signed_imm + carry_in;
-}
+        // Check if overflow occurs
+        if ((vs2_val > max_value - signed_imm - carry_in)) {
+            // Handle overflow: wrap the result within the range
+            uint64_t sum = (vs2_val + signed_imm + carry_in) % max_value;  // Wrap around
+            reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = sum;
+        } else {
+            // No overflow: directly store the sum
+            reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = vs2_val + signed_imm + carry_in;
+        }
     }
-    printf("\n\n_______________________\n\n");
 }
 
 
@@ -789,17 +990,13 @@ void vmadc_vvm(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2
         bool carry_in = (reg_status->Vector_Register[0].range(bit_offset + SEW - 1, bit_offset).to_uint() != 0);       
         // Compute sum with carry
         uint64_t max_value = (SEW == 64) ? UINT64_MAX : (1ULL << SEW) - 1ULL;  // max value based on SEW
-       
-        // Check if overflow occurs
-if (((int64_t)(vs2_val) > (int64_t)(max_value - vs1_val - carry_in) )) {
-    // Handle overflow: wrap the result within the range
-    reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = 1;
-} else {
-    // No overflow: directly store the sum
-    reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = 0;
-}
+            
+                // Check if overflow occurs
+        if (((int64_t)(vs2_val) > (int64_t)(max_value - vs1_val - carry_in) )) 
+            reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = 1;    // Handle overflow: wrap the result within the range
+        else 
+            reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = 0;    // No overflow: directly store the sum      
     }
-    printf("\n\n_______________________\n\n");
 }
 
 
@@ -832,15 +1029,14 @@ void vmadc_vi(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2,
         // Calculate max value based on SEW
         uint64_t max_value = (SEW == 64) ? UINT64_MAX : (1ULL << SEW) - 1ULL;
 
-// Check if overflow occurs
-if (((int64_t)(vs2_val) > (int64_t)(max_value - imm_unsigned - carry_in))) {
-    reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = 1;  // Set carry-out to 1
-} else {
-    // No overflow: zero as carry-out
-    reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = 0; 
-}
+        // Check if overflow occurs
+        if (((int64_t)(vs2_val) > (int64_t)(max_value - imm_unsigned - carry_in))) 
+            reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = 1;  // Set carry-out to 1
+        else 
+            // No overflow: zero as carry-out
+            reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = 0; 
+    
     }
-    printf("\n\n_______________________\n\n");
 }
 
 
@@ -862,7 +1058,6 @@ void vsbc_vvm(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2,
         bool borrow_out = (raw_result < 0);
         reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = result;
     }
-    printf("\n\n_______________________\n\n");
 }
 
 
@@ -893,15 +1088,11 @@ void vmsbc_vv(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2,
         reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) = borrow_out;
 
     }
-
-    printf("\n\n_______________________\n\n");
 }
 
 
 void vmerge_vvm(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2, uint8_t vm) {
     printf("\033[34m\nvmerge.vvm  v%d[i] = v0.mask[i] ? v%d[i] : v%d[i]\n\033[0m", vd, vs1, vs2);
-
-
     int SEW = reg_status->vtype.SEW;
     uint32_t VL = reg_status->VL;
 
@@ -912,8 +1103,6 @@ void vmerge_vvm(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs
         bool mask = reg_status->Vector_Register[0].range(bit_offset + SEW - 1, bit_offset).to_uint64() != 0;
         reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) =  (mask != 0) ? vs1_val: vs2_val;
     }
-
-    printf("\n\n_______________________\n\n");
 }
 
 
@@ -931,15 +1120,11 @@ void vmerge_vim(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs
         bool mask = reg_status->Vector_Register[0].range(bit_offset + SEW - 1, bit_offset).to_uint64() != 0;
         reg_status->Vector_Register[vd].range(bit_offset + SEW - 1, bit_offset) =  (mask != 0) ? signed_imm: vs2_val;
     }
-
-    printf("\n\n_______________________\n\n");
 }
 
 
 void vmsne_vv(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2, uint8_t vm) {
     printf("\033[34m\nvmsne.vv  v%d.mask[i] = v%d[i] != v%d[i] ? 1 : 0 \n\033[0m", vd, vs2, vs1);
-
-
     int SEW = reg_status->vtype.SEW;
     uint32_t VL = reg_status->VL;
 
@@ -964,10 +1149,7 @@ void vmsne_vv(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2,
         }
 
     }
-
-    printf("\n\n_______________________\n\n");
 }
-
 
 void vmseq_vi(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2, uint8_t vm) {
     printf("\033[34m\nvmseq.vi: v%d.mask[i] = (v%d[i] == imm(%d)) ? 1 : 0 \n\033[0m", vd, vs2, Imm);
@@ -998,8 +1180,6 @@ void vmseq_vi(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2,
             }
         }
     }
-
-    printf("\n\n_______________________\n\n");
 }
 
 
@@ -1031,15 +1211,10 @@ void vmsne_vi(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2,
             }
         }
     }
-
-    printf("\n\n_______________________\n\n");
 }
-
 
 void vmsltu_vv(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2, uint8_t vm) {
     printf("\033[34m\nvmsltu.vv  v%d.mask[i] = v%d[i] < v%d[i] ? 1 : 0 (Unsigned)\n\033[0m", vd, vs2, vs1);
-
-
     int SEW = reg_status->vtype.SEW;
     uint32_t VL = reg_status->VL;
 
@@ -1064,15 +1239,10 @@ void vmsltu_vv(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2
         }
 
     }
-
-    printf("\n\n_______________________\n\n");
 }
-
 
 void vmslt_vv(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2, uint8_t vm) {
     printf("\033[34m\nvmslt.vv  v%d.mask[i] = v%d[i] < v%d[i] ? 1 : 0 (Signed)\n\033[0m", vd, vs2, vs1);
-
-
     int SEW = reg_status->vtype.SEW;
     uint32_t VL = reg_status->VL;
 
@@ -1097,15 +1267,10 @@ void vmslt_vv(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2,
         }
 
     }
-
-    printf("\n\n_______________________\n\n");
 }
-
 
 void vmsleu_vv(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2, uint8_t vm) {
     printf("\033[34m\nvmslteu.vv  v%d.mask[i] = v%d[i] <= v%d[i] ? 1 : 0 (Unsigned)\n\033[0m", vd, vs2, vs1);
-
-
     int SEW = reg_status->vtype.SEW;
     uint32_t VL = reg_status->VL;
 
@@ -1130,14 +1295,10 @@ void vmsleu_vv(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2
         }
 
     }
-
-    printf("\n\n_______________________\n\n");
 }
-
 
 void vmsleu_vi(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2, uint8_t vm) {
     printf("\033[34m\nvmsleu.vi: v%d.mask[i] = (v%d[i] <= imm(%d)) ? 1 : 0 (Unsigned)\n\033[0m", vd, vs2, Imm);
-
     int SEW = reg_status->vtype.SEW;
     uint32_t VL = reg_status->VL;
 
@@ -1164,15 +1325,10 @@ void vmsleu_vi(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2
             }
         }
     }
-
-    printf("\n\n_______________________\n\n");
 }
-
 
 void vmsle_vv(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2, uint8_t vm) {
     printf("\033[34m\nvmslte.vv  v%d.mask[i] = v%d[i] <= v%d[i] ? 1 : 0 (Signed)\n\033[0m", vd, vs2, vs1);
-
-
     int SEW = reg_status->vtype.SEW;
     uint32_t VL = reg_status->VL;
 
@@ -1197,10 +1353,7 @@ void vmsle_vv(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2,
         }
 
     }
-
-    printf("\n\n_______________________\n\n");
 }
-
 
 void vmsle_vi(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2, uint8_t vm) {
     printf("\033[34m\nvmsle.vi: v%d.mask[i] = (v%d[i] <= imm(%d)) ? 1 : 0 (Signed)\n\033[0m", vd, vs2, Imm);
@@ -1230,10 +1383,7 @@ void vmsle_vi(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2,
             }
         }
     }
-
-    printf("\n\n_______________________\n\n");
 }
-
 
 void vmsgtu_vi(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2, uint8_t vm) {
     printf("\033[34m\nvmsgtu.vi: v%d.mask[i] = (v%d[i] > imm(%d)) ? 1 : 0 (Unsigned)\n\033[0m", vd, vs2, Imm);
@@ -1264,8 +1414,6 @@ void vmsgtu_vi(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2
             }
         }
     }
-
-    printf("\n\n_______________________\n\n");
 }
 
 
@@ -1275,7 +1423,7 @@ void vmsgt_vi(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2,
     int SEW = reg_status->vtype.SEW;
     uint32_t VL = reg_status->VL;
 
-    int8_t imm5 = static_cast<int8_t>(Imm << 3) >> 3;  // Extract 5-bit signed value
+    int8_t imm5 = static_cast<int8_t>(Imm << 3) >> 3;    // Extract 5-bit signed value
     int64_t signed_imm = static_cast<int64_t>(imm5);     // Sign-extend to 64 bits
 
     for (uint32_t i = 0; i < VL; i++) {
@@ -1297,6 +1445,15 @@ void vmsgt_vi(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2,
             }
         }
     }
-
-    printf("\n\n_______________________\n\n");
 }
+
+
+                                                //**             Base‑ISA Instruction "CSRRWI"                **//
+                                                
+void csrwi_vxrm(Register_Status *register_status, sc_bv<5> Imm){
+    printf("csrwi vxrm, %u\n",Imm.to_uint());
+    register_status->vcsr.range(2,1) = Imm.range(1,0);
+
+}
+
+

@@ -3,6 +3,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <cstring>
+#include "modules/datamemory.h"
 
 std::string binary_conf = "";
 
@@ -50,8 +51,8 @@ void printRegisterStatus(Register_Status *reg_status) {
 
                 int64_t val = reg_status->Vector_Register[i].range(j + reg_status->vtype.SEW - 1, j).to_int64();  // sign-extended to 64 bits internally
                 switch (reg_status->vtype.SEW) {
-                    // case 8:  printf("%d, ",  static_cast<int8_t>(val));  break;     //signed 8 bit 
-                    case 8:  printf("%u, ",  static_cast<uint8_t>(val));  break;       //unsigned 8 bit 
+                    case 8:  printf("%d, ",  static_cast<int8_t>(val));  break;     //signed 8 bit 
+                    // case 8:  printf("%u, ",  static_cast<uint8_t>(val));  break;       //unsigned 8 bit 
                     // case 16: printf("%d, ",  static_cast<int16_t>(val)); break;        //signed 16 bit
                     case 16: printf("%u, ",  static_cast<uint16_t>(val)); break;       //unsigned 16 bit 
                     case 32: printf("%d, ",  static_cast<int32_t>(val)); break;        //signed 32 bit 
@@ -69,9 +70,8 @@ void free_resourses(Register_Status *&reg_status){                         //Rea
 
     delete reg_status;      // Free the Register_Status object
     reg_status = nullptr;
-
-    delete [] memory;        // Free the instruction memory array
-    memory = nullptr; 
+    delete datamem;
+    datamem = nullptr;
 }
 
 
@@ -140,9 +140,6 @@ void readConfigurationFile(const std::string& filePath) {
 
             else if (std::string(key) == "AVL") {
                 reg_status->AVL = value;
-            }
-            else if (std::string(key) == "INSTRUCTION_MEMORY_SIZE") {
-                INSTRUCTION_MEMORY_SIZE = value;
             }
         }
     }
@@ -232,7 +229,7 @@ void ReadConfigurationFileParameters(){
     reg_status->VLMAX = (VLEN/reg_status->vtype.SEW) * reg_status->vtype.LMUL;                     //calculating VLMAX(number of elements)
     reg_status->VL = (reg_status->AVL > reg_status->VLMAX) ? reg_status->VLMAX: reg_status->AVL;
     reg_status->vlenb = (VLEN/8);
-    reg_status->vcsr = sc_bv<32>("00000000000000000000000000000000");
+    reg_status->vcsr = sc_bv<32>("00000000000000000000000000000000");                               //Default RNU rounding mode
 
     const std::string vlen_zero(VLEN, '0'); 
     for (int i = 0; i < NUMBER_OF_REGISTERS; i++) {
