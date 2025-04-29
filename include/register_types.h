@@ -25,5 +25,4 @@ typedef struct{
 } Register_Status;
 
 extern Register_Status* reg_status;
-
 #endif
