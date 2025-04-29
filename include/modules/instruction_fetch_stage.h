@@ -1,46 +1,39 @@
 #ifndef INSTRUCTION_FETCH_STAGE_H
 #define INSTRUCTION_FETCH_STAGE_H
 
-#include <systemc.h>
+#include <systemc>
 #include "instruction_memory.h"
 
-///                 FETCH STAGE         ////////////////
+SC_MODULE(Instruction_Fetch_Stage)
+{
+    sc_out<sc_bv<32>> instruction_out;  // instruction output from fetch module
+    Instruction_Memory imem;            // dynamic memory
+    sc_signal<sc_uint<32>> PC;          // address 
 
-
-SC_MODULE(Instruction_Fetch_Stage) {
-    sc_out<sc_bv<32>> instruction_out;
-    Instruction_Memory instruction_memory_instance;
-    sc_signal<sc_uint<8>> PC;
-
-    SC_CTOR(Instruction_Fetch_Stage) 
-      : instruction_memory_instance("im")
+    void fetch()                        // function for fetching instructions from Instruction memory
     {
-        instruction_memory_instance.address(PC);
-        instruction_memory_instance.instruction(instruction_out);
-        PC.write(0);
-        SC_THREAD(fetch);
+        wait(SC_ZERO_TIME);             // allowing the first value of PC assigned
+        while (true) {
+            if (PC.read() >= imem.size()) {             // imem.size() is the number of available instructions
+                if (sc_core::sc_get_status() != sc_core::SC_STOPPED)        // sc_get_status()--> returns the current state of the SystemC kernel(started or stopped)
+                    sc_core::sc_stop();                                     // Request SystemC to stop the simulation 
+                return;                     // terminate this thread
+            }
+            PC.write(PC.read() + 1);                                        // increment PC to fetch the next PC
+            wait(1, SC_NS);                                                 // waiting 1 NS delay for fetching Instruction
+        }
     }
 
-    void fetch() {
-        wait(SC_ZERO_TIME);  // Let initial instruction propagate
+    SC_CTOR(Instruction_Fetch_Stage)                                       
+    : imem("imem")                                                          // imem refer to Instruction_Memory module to be submodule defined (member initializer)
+    {
+        imem.address(PC);                                                   // after initialize Instruction_Memory ,, assign value of PC as Address to imem (Input)
+        imem.instruction(instruction_out);                                  // assign instruction_out as Output from imem
 
-        while(true) {
-            sc_uint<8> current_pc = PC.read();
-            
-            // Check exit condition
-            if(current_pc == (INSTRUCTION_MEMORY_SIZE) - 1) {
-                sc_stop();
-                break;
-            }
-
-            // Increment PC and wait    sc_signal<sc_uint<8>> PC;
-
-            PC.write(current_pc + 1);
-            wait(1, SC_NS);
-        }
+        PC.write(0);                                                        // first value of address assigned 0 ---> first value
+        SC_THREAD(fetch);                                                   // running the register process function (Combinationally,,SC_METHOD)
     }
 
     void reset_pc() { PC.write(0); }
 };
-
 #endif

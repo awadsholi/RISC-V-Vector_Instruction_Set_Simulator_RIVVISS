@@ -1,8 +1,8 @@
 run:
-	g++ src/main.cpp src/instructions.cpp src/functions.cpp -o main -std=c++17 \
+	g++ src/main.cpp src/instructions.cpp src/functions.cpp src/dartamemory.cpp -o main -std=c++17 \
     -I/usr/local/systemc/include \
     -Iinclude \
-    -L/usr/local/systemc/lib-linux64 -lsystemc -lm
+    -L/usr/local/systemc/lib -lsystemc -lm
 	./main
 
 clean:
