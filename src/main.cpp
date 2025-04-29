@@ -2,48 +2,44 @@
 #include "functions.h"
 #include "instructions.h"
 #include "modules/fetch_to_execution.h"
+#include "modules/datamemory.h"
 
 Register_Status* reg_status = nullptr;
-sc_bv<32>* memory = nullptr;
-int INSTRUCTION_MEMORY_SIZE;
-
+Memory* datamem = nullptr;
 int sc_main(int argc, char* argv[]) {
-
+    Memory* datamem = new Memory();
     reg_status = new Register_Status();
+
     readConfigurationFile("files/cofigure.txt");
     ReadConfigurationFileParameters();
 
-    memory = new sc_bv<32>[INSTRUCTION_MEMORY_SIZE];
-    for (int i = 0; i < INSTRUCTION_MEMORY_SIZE ; ++i) {
-        memory[i] = sc_bv<32>();  
-    }
+    sc_signal<sc_bv<32>> fetched_instr;
+    Instruction_Fetch_Stage if_stage("IF");
+    if_stage.instruction_out(fetched_instr);
 
-    reg_status->Vector_Register[0].range(7, 0)   = sc_bv<8>(0);     
-    reg_status->Vector_Register[0].range(15, 8)  = sc_bv<8>(0);     
-    reg_status->Vector_Register[0].range(23, 16) = sc_bv<8>(1);    
+    reg_status->Vector_Register[0].range(7, 0)   = sc_bv<8>(1);
+    reg_status->Vector_Register[0].range(15, 8)  = sc_bv<8>(1);   
+    reg_status->Vector_Register[0].range(23, 16) = sc_bv<8>(1);
+    reg_status->Vector_Register[0].range(31, 24) = sc_bv<8>(1);
 
-    reg_status->Vector_Register[1].range(7, 0)   = sc_bv<8>(255);     
-    reg_status->Vector_Register[1].range(15, 8)  = sc_bv<8>(-1);     
-    reg_status->Vector_Register[1].range(23, 16) = sc_bv<8>(255);    
-    reg_status->Vector_Register[1].range(31, 24) = sc_bv<8>(-15);    
-    reg_status->Vector_Register[1].range(39, 32) = sc_bv<8>(15);    
-    reg_status->Vector_Register[1].range(47, 40) = sc_bv<8>(5);    
-    reg_status->Vector_Register[1].range(55, 48) = sc_bv<8>(-100);    
-    reg_status->Vector_Register[1].range(63, 56) = sc_bv<8>(12);     
-
-    reg_status->Vector_Register[2].range(7, 0)   = sc_bv<8>(-2);    
-    reg_status->Vector_Register[2].range(15, 8)  = sc_bv<8>(-2);    
-    reg_status->Vector_Register[2].range(23, 16) = sc_bv<8>(-30);    
-    reg_status->Vector_Register[2].range(31, 24) = sc_bv<8>(98);    
-    reg_status->Vector_Register[2].range(39, 32) = sc_bv<8>(-15);    
-    reg_status->Vector_Register[2].range(47, 40) = sc_bv<8>(-100);    
-    reg_status->Vector_Register[2].range(55, 48) = sc_bv<8>(100);    
-    reg_status->Vector_Register[2].range(63, 56) = sc_bv<8>(-70);       
-
-    // reg_status->Vector_Register[0].range(15, 0)   = sc_bv<16>(0);     
-    // reg_status->Vector_Register[0].range(31, 16)  = sc_bv<16>(0);  
-    // reg_status->Vector_Register[0].range(47, 32)  = sc_bv<16>(1); 
-
+    reg_status->Vector_Register[1].range(7, 0)   = sc_bv<8>(10);     
+    reg_status->Vector_Register[1].range(15, 8)  = sc_bv<8>(127);     
+    reg_status->Vector_Register[1].range(23, 16) = sc_bv<8>(80);    
+    reg_status->Vector_Register[1].range(31, 24) = sc_bv<8>(-78);    
+    reg_status->Vector_Register[1].range(39, 32) = sc_bv<8>(0);    
+    reg_status->Vector_Register[1].range(47, 40) = sc_bv<8>(2);    
+    reg_status->Vector_Register[1].range(55, 48) = sc_bv<8>(14);    
+    reg_status->Vector_Register[1].range(63, 56) = sc_bv<8>(2);
+    
+    reg_status->Vector_Register[2].range(7, 0)   = sc_bv<8>(1);    
+    reg_status->Vector_Register[2].range(15, 8)  = sc_bv<8>(-1);    
+    reg_status->Vector_Register[2].range(23, 16) = sc_bv<8>(-3);    
+    reg_status->Vector_Register[2].range(31, 24) = sc_bv<8>(4);    
+    reg_status->Vector_Register[2].range(39, 32) = sc_bv<8>(3);    
+    reg_status->Vector_Register[2].range(47, 40) = sc_bv<8>(-34);
+    reg_status->Vector_Register[2].range(55, 48) = sc_bv<8>(22);
+    reg_status->Vector_Register[2].range(63, 56) = sc_bv<8>(0);      
+    
     // reg_status->Vector_Register[1].range(15, 0)   = sc_bv<16>(32767);     
     // reg_status->Vector_Register[1].range(31, 16)  = sc_bv<16>(-32768);  
     // reg_status->Vector_Register[1].range(47, 32)  = sc_bv<16>(16384); 
