@@ -1,15 +1,16 @@
 #include "register_types.h"
 #include "functions.h"
 #include "instructions.h"
-#include "modules/fetch_to_execution.h"
 #include "modules/datamemory.h"
+#include "modules/fetch_to_execution.h"
 
 Register_Status* reg_status = nullptr;
 Memory* datamem = nullptr;
-int sc_main(int argc, char* argv[]) {
-    Memory* datamem = new Memory();
-    reg_status = new Register_Status();
 
+int sc_main(int argc, char* argv[]) {
+
+    reg_status = new Register_Status();
+    datamem = new Memory();
     readConfigurationFile("files/cofigure.txt");
     ReadConfigurationFileParameters();
 
