@@ -41,6 +41,21 @@ void vssrl_vv(Register_Status* register_status, uint8_t vd, uint8_t vs2, uint8_t
 void vssrl_vi(Register_Status* register_status, uint8_t vd, uint8_t vs2, uint8_t Imm, uint8_t vm);
 void vssra_vv(Register_Status* register_status, uint8_t vd, uint8_t vs2, uint8_t vs1, uint8_t vm);
 void vssra_vi(Register_Status *register_status, uint8_t vd, uint8_t vs2, uint8_t Imm, uint8_t vm);
+                         
+                        //****         Reduction and Averaging Instructions (OPMVV)       ****//
+
+void vredsum_vs (Register_Status* register_status, uint8_t vd, uint8_t vs2, uint8_t vs1, uint8_t vm);
+void vredand_vs (Register_Status* register_status, uint8_t vd, uint8_t vs2, uint8_t vs1, uint8_t vm);
+void vredor_vs  (Register_Status* register_status, uint8_t vd, uint8_t vs2, uint8_t vs1, uint8_t vm);
+void vredxor_vs (Register_Status* register_status, uint8_t vd, uint8_t vs2, uint8_t vs1, uint8_t vm);
+void vredmax_vs (Register_Status* register_status, uint8_t vd, uint8_t vs2, uint8_t vs1, uint8_t vm);
+void vredmin_vs (Register_Status* register_status, uint8_t vd, uint8_t vs2, uint8_t vs1, uint8_t vm);
+void vredmaxu_vs(Register_Status* register_status, uint8_t vd, uint8_t vs2, uint8_t vs1, uint8_t vm);
+void vredminu_vs(Register_Status* register_status, uint8_t vd, uint8_t vs2, uint8_t vs1, uint8_t vm);
+void vaadd_vv   (Register_Status* register_status, uint8_t vd, uint8_t vs2, uint8_t vs1, uint8_t vm);
+void vaaddu_vv  (Register_Status* register_status, uint8_t vd, uint8_t vs2, uint8_t vs1, uint8_t vm);
+void vasub_vv   (Register_Status* register_status, uint8_t vd, uint8_t vs2, uint8_t vs1, uint8_t vm);
+void vasubu_vv  (Register_Status* register_status, uint8_t vd, uint8_t vs2, uint8_t vs1, uint8_t vm);
 
             //                             Masking Instructions                        //
 
@@ -63,5 +78,8 @@ void vmsle_vv(Register_Status* reg_status, uint8_t vd, uint8_t vs1, uint8_t vs2,
 void vmsle_vi(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2, uint8_t vm);
 void vmsgtu_vi(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2, uint8_t vm);
 void vmsgt_vi(Register_Status* reg_status, uint8_t vd, uint8_t Imm, uint8_t vs2, uint8_t vm);
+
+void csrwi_vxrm(Register_Status *register_status, sc_bv<5> Imm);
+
 
 #endif

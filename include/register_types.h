@@ -25,7 +25,5 @@ typedef struct{
 } Register_Status;
 
 extern Register_Status* reg_status;
-extern sc_bv<32>* memory;
-extern int INSTRUCTION_MEMORY_SIZE;
 
 #endif
